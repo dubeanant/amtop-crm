@@ -34,7 +34,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const response = await fetch(`/api/users/${firebaseUser.uid}`);
       if (response.ok) {
-        const userData = await response.json();
+        const userData: UserProfile = await response.json();
         return userData;
       } else if (response.status === 404) {
         // User doesn't exist in MongoDB, create profile
@@ -66,7 +66,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       if (response.ok) {
-        const userData = await response.json();
+        const userData: UserProfile = await response.json();
         return {
           ...userData,
           permissions: ROLE_PERMISSIONS[userData.role] || ROLE_PERMISSIONS[DEFAULT_ROLE]
