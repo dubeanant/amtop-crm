@@ -64,13 +64,13 @@ export async function GET(req: NextRequest) {
     if (requestingUser.role === 'admin') {
       // Admin can see all users
       users = await usersCollection.find({}).toArray();
-    } else if (requestingUser.role === 'manager') {
-      // Manager can see team members (sales and viewers)
+    } else if (requestingUser.role === 'user') {
+      // Regular users can see their team members (user and viewer roles)
       users = await usersCollection.find({ 
-        role: { $in: ['sales', 'viewer'] } 
+        role: { $in: ['user', 'viewer'] } 
       }).toArray();
     } else {
-      // Others can only see themselves
+      // Viewers can only see themselves
       users = await usersCollection.find({ email: requestingUserEmail }).toArray();
     }
     

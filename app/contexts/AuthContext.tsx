@@ -137,15 +137,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       throw new Error('Insufficient permissions to update user roles');
     }
 
+    if (!user?.email) {
+      throw new Error('User email not available');
+    }
+
     try {
-      const response = await fetch(`/api/users/${userId}/role`, {
+      const response = await fetch(`/api/users/${userId}/role?requestingUser=${encodeURIComponent(user.email)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update user role');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update user role');
       }
 
       // If updating current user's role, refresh the user data

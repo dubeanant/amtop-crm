@@ -131,26 +131,59 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-4 space-y-2">
-            {sidebarItems.map((item) => (
-              <RoleGuard
-                key={item.name}
-                resource={item.resource}
-                action={item.action}
-              >
-                <Link
-                  href={item.href}
-                  className={`flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
-                    pathname === item.href
-                      ? 'bg-blue-100 text-blue-700 border-r-2 border-blue-700'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
-                  onClick={() => onClose()}
+            {sidebarItems.map((item) => {
+              // Special handling for Analytics - check for both 'read' and 'read_own' permissions
+              if (item.name === 'Analytics') {
+                const hasAnalyticsAccess = user && (
+                  user.permissions.some(p => 
+                    p.resource === 'analytics' && 
+                    (p.actions.includes('read') || p.actions.includes('read_own'))
+                  )
+                );
+                
+                if (!hasAnalyticsAccess) {
+                  return null;
+                }
+                
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
+                      pathname === item.href
+                        ? 'bg-blue-100 text-blue-700 border-r-2 border-blue-700'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
+                    onClick={() => onClose()}
+                  >
+                    <span className="mr-3">{item.icon}</span>
+                    {item.name}
+                  </Link>
+                );
+              }
+              
+              // Regular RoleGuard for other items
+              return (
+                <RoleGuard
+                  key={item.name}
+                  resource={item.resource}
+                  action={item.action}
                 >
-                  <span className="mr-3">{item.icon}</span>
-                  {item.name}
-                </Link>
-              </RoleGuard>
-            ))}
+                  <Link
+                    href={item.href}
+                    className={`flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
+                      pathname === item.href
+                        ? 'bg-blue-100 text-blue-700 border-r-2 border-blue-700'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
+                    onClick={() => onClose()}
+                  >
+                    <span className="mr-3">{item.icon}</span>
+                    {item.name}
+                  </Link>
+                </RoleGuard>
+              );
+            })}
           </nav>
 
           {/* Footer */}

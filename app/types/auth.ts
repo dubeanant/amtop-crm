@@ -38,6 +38,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
   user: [
     { resource: 'leads', actions: ['create', 'read', 'update', 'delete', 'view_own'] },
+    { resource: 'users', actions: ['read', 'view_team'] },
     { resource: 'pipeline', actions: ['read', 'update_own'] },
     { resource: 'analytics', actions: ['read_own'] },
   ],

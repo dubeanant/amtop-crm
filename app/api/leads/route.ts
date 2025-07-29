@@ -19,6 +19,9 @@ interface Lead {
 interface LeadWithUserInfo extends Lead {
   uploadedBy: string;
   uploadedAt: string;
+  stage: 'lead' | 'engaged' | 'warm';
+  stageUpdatedAt: string;
+  stageUpdatedBy: string;
 }
 
 const uri = process.env.MONGODB_URI as string;
@@ -68,11 +71,14 @@ export async function POST(req: NextRequest) {
       return hasValidData;
     });
     
-    // Add user info and timestamp to each lead
+    // Add user info, timestamp, and default stage to each lead
     const leadsWithUserInfo: LeadWithUserInfo[] = validLeads.map((lead: Lead) => ({
       ...lead,
       uploadedBy: userEmail,
-      uploadedAt: new Date().toISOString()
+      uploadedAt: new Date().toISOString(),
+      stage: 'lead', // Default stage for new leads
+      stageUpdatedAt: new Date().toISOString(),
+      stageUpdatedBy: userEmail
     }));
 
     if (leadsWithUserInfo.length === 0) {
