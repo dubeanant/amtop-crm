@@ -10,6 +10,7 @@ interface User {
   email: string;
   displayName: string;
   role: UserRole;
+  teamId?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -22,6 +23,8 @@ export default function UsersPage() {
   const [error, setError] = useState<string>('');
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [refreshSuccess, setRefreshSuccess] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationSuccess, setMigrationSuccess] = useState(false);
 
   const fetchUsers = async () => {
     if (!user?.email) return;
@@ -52,6 +55,40 @@ export default function UsersPage() {
     // Show success message briefly
     setRefreshSuccess(true);
     setTimeout(() => setRefreshSuccess(false), 2000);
+  };
+
+  const handleMigration = async () => {
+    if (!user?.email || user.role !== 'admin') {
+      setError('Only admins can run migrations');
+      return;
+    }
+
+    try {
+      setIsMigrating(true);
+      setError('');
+      setMigrationSuccess(false);
+
+      const response = await fetch('/api/users/migrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestingUser: user.email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setMigrationSuccess(true);
+        setTimeout(() => setMigrationSuccess(false), 3000);
+        await fetchUsers(); // Refresh users list
+      } else {
+        setError(data.error || 'Migration failed');
+      }
+    } catch (error) {
+      console.error('Migration error:', error);
+      setError('Migration failed');
+    } finally {
+      setIsMigrating(false);
+    }
   };
 
   const handleRoleChange = async (userId: string, newRole: UserRole) => {
@@ -152,7 +189,7 @@ export default function UsersPage() {
             </svg>
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">Access Denied</h3>
-          <p className="text-gray-600">You don't have permission to view user management.</p>
+          <p className="text-gray-600">You don't have permission to view team management.</p>
         </div>
       }>
         <div className="space-y-6">
@@ -160,47 +197,85 @@ export default function UsersPage() {
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Team Management</h1>
                 <p className="text-gray-600 mt-1">
-                  Manage user roles and permissions
+                  Manage your team members and their roles
                 </p>
+                {user?.teamId && (
+                  <p className="text-sm text-blue-600 mt-1">
+                    Team: {user.teamId}
+                  </p>
+                )}
               </div>
               <div className="flex items-center space-x-4">
                 <span className="text-sm text-gray-500">
-                  {users.length} user{users.length !== 1 ? 's' : ''}
+                  {users.length} team member{users.length !== 1 ? 's' : ''}
                 </span>
                 {user?.role === 'admin' && (
-                  <button
-                    onClick={handleManualRefresh}
-                    disabled={loading}
-                    className={`flex items-center space-x-2 px-3 py-2 text-sm font-medium border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ${
-                      refreshSuccess 
-                        ? 'text-green-700 bg-green-50 border-green-300' 
-                        : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
-                    }`}
-                    title="Refresh users list"
-                  >
-                    {refreshSuccess ? (
-                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg 
-                        className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} 
-                        fill="none" 
-                        stroke="currentColor" 
-                        viewBox="0 0 24 24"
-                      >
-                        <path 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round" 
-                          strokeWidth={2} 
-                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
-                        />
-                      </svg>
-                    )}
-                    <span>{refreshSuccess ? 'Refreshed!' : 'Refresh'}</span>
-                  </button>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={handleManualRefresh}
+                      disabled={loading}
+                      className={`flex items-center space-x-2 px-3 py-2 text-sm font-medium border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ${
+                        refreshSuccess 
+                          ? 'text-green-700 bg-green-50 border-green-300' 
+                          : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+                      }`}
+                      title="Refresh users list"
+                    >
+                      {refreshSuccess ? (
+                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg 
+                          className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                            strokeWidth={2} 
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+                          />
+                        </svg>
+                      )}
+                      <span>{refreshSuccess ? 'Refreshed!' : 'Refresh'}</span>
+                    </button>
+                    <button
+                      onClick={handleMigration}
+                      disabled={isMigrating}
+                      className={`flex items-center space-x-2 px-3 py-2 text-sm font-medium border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ${
+                        migrationSuccess 
+                          ? 'text-green-700 bg-green-50 border-green-300' 
+                          : 'text-purple-700 bg-purple-50 border-purple-300 hover:bg-purple-100'
+                      }`}
+                      title="Migrate users to add team IDs"
+                    >
+                      {migrationSuccess ? (
+                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg 
+                          className={`w-4 h-4 ${isMigrating ? 'animate-spin' : ''}`} 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                            strokeWidth={2} 
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" 
+                          />
+                        </svg>
+                      )}
+                      <span>{migrationSuccess ? 'Migrated!' : isMigrating ? 'Migrating...' : 'Migrate Teams'}</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -223,7 +298,12 @@ export default function UsersPage() {
           {/* Users Table */}
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Users</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Team Members</h2>
+                <div className="text-sm text-gray-500">
+                  Only showing users from your team/organization
+                </div>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -234,6 +314,9 @@ export default function UsersPage() {
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Role
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Team
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Status
@@ -288,6 +371,11 @@ export default function UsersPage() {
                             </div>
                           </div>
                         </RoleGuard>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                          {userItem.teamId || 'No team'}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeColor(userItem.isActive)}`}>

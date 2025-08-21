@@ -1,5 +1,6 @@
 'use client';
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface HeaderProps {
@@ -9,10 +10,13 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const { user, signOut } = useAuth();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const router = useRouter();
 
   const handleSignOut = async () => {
     try {
       await signOut();
+      // Redirect to sign-in page after successful logout
+      router.push('/sign-in');
     } catch (error) {
       console.error('Sign out error:', error);
     }

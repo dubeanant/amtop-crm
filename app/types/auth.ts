@@ -6,6 +6,7 @@ export interface UserProfile {
   email: string;
   displayName?: string;
   role: UserRole;
+  teamId?: string; // Organization/Team identifier
   createdAt: string;
   updatedAt: string;
   isActive: boolean;
@@ -39,7 +40,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   user: [
     { resource: 'leads', actions: ['create', 'read', 'update', 'delete', 'view_own'] },
     { resource: 'users', actions: ['read', 'view_team'] },
-    { resource: 'pipeline', actions: ['read', 'update_own'] },
+    { resource: 'pipeline', actions: ['create', 'read', 'update', 'delete'] },
     { resource: 'analytics', actions: ['read_own'] },
   ],
   viewer: [

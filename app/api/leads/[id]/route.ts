@@ -7,7 +7,7 @@ const dbName = process.env.MONGODB_DB as string;
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let client: MongoClient | null = null;
   
@@ -20,7 +20,7 @@ export async function PUT(
       }, { status: 500 });
     }
 
-    const leadId = params.id;
+    const { id: leadId } = await params;
     const updateData = await req.json();
     
     if (!leadId) {

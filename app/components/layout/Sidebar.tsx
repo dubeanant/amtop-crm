@@ -110,18 +110,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       >
         <div className="flex flex-col h-full">
           {/* Logo/Header */}
-          <div className="flex items-center justify-between h-16 px-6 bg-blue-600 text-white">
-            <div className="flex items-center space-x-3">
+          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
+            <div className="flex items-center">
               <img 
                 src="/amTop-logo.jpg" 
                 alt="amTop Logo" 
-                className="w-8 h-8 rounded-full bg-white p-1"
+                className="w-8 h-8 rounded-full bg-white p-1 border border-gray-200"
               />
-              <h1 className="text-xl font-bold">CRM System</h1>
             </div>
             <button
               onClick={onClose}
-              className="lg:hidden p-1 rounded-md hover:bg-blue-700"
+              className="lg:hidden p-1 rounded-md hover:bg-gray-100 text-gray-600"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

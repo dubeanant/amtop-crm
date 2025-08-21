@@ -59,15 +59,40 @@ export async function GET(req: NextRequest) {
       }, { status: 403 });
     }
 
-    // Get users based on role permissions
+    // Get users based on role permissions and team membership
     let users;
+    const requestingUserDomain = requestingUser.email.split('@')[1];
+    const requestingUserTeamId = requestingUser.teamId || requestingUserDomain;
+    
     if (requestingUser.role === 'admin') {
-      // Admin can see all users
-      users = await usersCollection.find({}).toArray();
-    } else if (requestingUser.role === 'user') {
-      // Regular users can see their team members (user and viewer roles)
+      // Admin can see users from same team/domain
       users = await usersCollection.find({ 
-        role: { $in: ['user', 'viewer'] } 
+        $or: [
+          { teamId: requestingUserTeamId }, // Same teamId
+          { 
+            teamId: { $exists: false }, 
+            email: { $regex: `@${requestingUserDomain}$` } 
+          }, // Same domain for users without teamId
+          { 
+            teamId: null, 
+            email: { $regex: `@${requestingUserDomain}$` } 
+          } // Handle null teamId
+        ]
+      }).toArray();
+    } else if (requestingUser.role === 'user') {
+      // Regular users can see their team members only
+      users = await usersCollection.find({ 
+        $or: [
+          { teamId: requestingUserTeamId }, // Same teamId
+          { 
+            teamId: { $exists: false }, 
+            email: { $regex: `@${requestingUserDomain}$` } 
+          }, // Same domain for users without teamId
+          { 
+            teamId: null, 
+            email: { $regex: `@${requestingUserDomain}$` } 
+          } // Handle null teamId
+        ]
       }).toArray();
     } else {
       // Viewers can only see themselves
@@ -80,6 +105,7 @@ export async function GET(req: NextRequest) {
       email: user.email,
       displayName: user.displayName,
       role: user.role,
+      teamId: user.teamId,
       isActive: user.isActive,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt
@@ -142,12 +168,17 @@ export async function POST(req: NextRequest) {
     // Check if this is the first user (make them admin)
     const userCount = await usersCollection.countDocuments();
     const role = userCount === 0 ? 'admin' : (userData.role || DEFAULT_ROLE);
+    
+    // Generate team ID based on email domain or use provided teamId
+    const emailDomain = userData.email.split('@')[1];
+    const teamId = userData.teamId || emailDomain;
 
     const newUser: UserProfile = {
       uid: userData.uid,
       email: userData.email,
       displayName: userData.displayName || '',
       role: role as UserRole,
+      teamId: teamId,
       createdAt: userData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       isActive: true,
@@ -164,6 +195,7 @@ export async function POST(req: NextRequest) {
         email: newUser.email,
         displayName: newUser.displayName,
         role: newUser.role,
+        teamId: newUser.teamId,
         isActive: newUser.isActive,
         createdAt: newUser.createdAt,
         updatedAt: newUser.updatedAt

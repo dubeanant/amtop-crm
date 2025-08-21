@@ -8,7 +8,7 @@ const dbName = process.env.MONGODB_DB as string;
 // GET single user by ID
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let client: MongoClient | null = null;
   
@@ -22,7 +22,7 @@ export async function GET(
       }, { status: 500 });
     }
 
-    const userId = params.id;
+    const { id: userId } = await params;
     
     if (!userId) {
       return NextResponse.json({ 
@@ -75,7 +75,7 @@ export async function GET(
 // PUT - Update user profile
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let client: MongoClient | null = null;
   
@@ -89,7 +89,7 @@ export async function PUT(
       }, { status: 500 });
     }
 
-    const userId = params.id;
+    const { id: userId } = await params;
     const updateData = await req.json();
     
     if (!userId) {
@@ -161,7 +161,7 @@ export async function PUT(
 // DELETE user (admin only)
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let client: MongoClient | null = null;
   
@@ -175,9 +175,9 @@ export async function DELETE(
       }, { status: 500 });
     }
 
-    const userId = params.id;
-    const { searchParams } = new URL(req.url);
-    const requestingUserEmail = searchParams.get('requestingUser');
+    const { id: userId } = await params;
+    const requestData = await req.json();
+    const requestingUserEmail = requestData.requestingUser;
     
     if (!userId || !requestingUserEmail) {
       return NextResponse.json({ 
@@ -191,25 +191,42 @@ export async function DELETE(
     
     const db = client.db(dbName);
     const usersCollection = db.collection("users");
+    const leadsCollection = db.collection("leads");
     
     // Check requesting user permissions
     const requestingUser = await usersCollection.findOne({ email: requestingUserEmail });
     
-    if (!requestingUser || requestingUser.role !== 'admin') {
+    if (!requestingUser) {
+      return NextResponse.json({ 
+        success: false, 
+        error: "Requesting user not found" 
+      }, { status: 404 });
+    }
+
+    // Allow users to delete their own account or admins to delete others
+    const canDelete = requestingUser.uid === userId || requestingUser.role === 'admin';
+    
+    if (!canDelete) {
       return NextResponse.json({ 
         success: false, 
         error: "Insufficient permissions" 
       }, { status: 403 });
     }
 
-    // Don't allow admin to delete themselves
-    if (requestingUser.uid === userId) {
+    // Get the user to be deleted
+    const userToDelete = await usersCollection.findOne({ uid: userId });
+    
+    if (!userToDelete) {
       return NextResponse.json({ 
         success: false, 
-        error: "Cannot delete your own account" 
-      }, { status: 400 });
+        error: "User not found" 
+      }, { status: 404 });
     }
     
+    // Delete user's leads first
+    await leadsCollection.deleteMany({ uploadedBy: userToDelete.email });
+    
+    // Delete the user
     const result = await usersCollection.deleteOne({ uid: userId });
     
     if (result.deletedCount === 0) {
@@ -221,7 +238,7 @@ export async function DELETE(
     
     return NextResponse.json({
       success: true,
-      message: "User deleted successfully"
+      message: "User and associated data deleted successfully"
     });
   } catch (error) {
     console.error("DELETE /api/users/[id] error:", error);

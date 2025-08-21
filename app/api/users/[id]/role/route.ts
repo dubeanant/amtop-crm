@@ -8,7 +8,7 @@ const dbName = process.env.MONGODB_DB as string;
 // PUT - Update user role (admin only)
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let client: MongoClient | null = null;
   
@@ -22,7 +22,7 @@ export async function PUT(
       }, { status: 500 });
     }
 
-    const userId = params.id;
+    const { id: userId } = await params;
     const { role } = await req.json();
     const { searchParams } = new URL(req.url);
     const requestingUserEmail = searchParams.get('requestingUser');

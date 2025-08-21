@@ -49,11 +49,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Create user profile in MongoDB
   const createUserProfile = async (firebaseUser: User): Promise<UserProfile | null> => {
     try {
+      const emailDomain = firebaseUser.email!.split('@')[1];
       const newUserProfile: Omit<UserProfile, 'permissions'> = {
         uid: firebaseUser.uid,
         email: firebaseUser.email!,
         displayName: firebaseUser.displayName || '',
         role: DEFAULT_ROLE,
+        teamId: emailDomain, // Use email domain as default team identifier
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         isActive: true,
