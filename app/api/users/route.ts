@@ -64,36 +64,9 @@ export async function GET(req: NextRequest) {
     const requestingUserDomain = requestingUser.email.split('@')[1];
     const requestingUserTeamId = requestingUser.teamId || requestingUserDomain;
     
-    if (requestingUser.role === 'admin') {
-      // Admin can see users from same team/domain
-      users = await usersCollection.find({ 
-        $or: [
-          { teamId: requestingUserTeamId }, // Same teamId
-          { 
-            teamId: { $exists: false }, 
-            email: { $regex: `@${requestingUserDomain}$` } 
-          }, // Same domain for users without teamId
-          { 
-            teamId: null, 
-            email: { $regex: `@${requestingUserDomain}$` } 
-          } // Handle null teamId
-        ]
-      }).toArray();
-    } else if (requestingUser.role === 'user') {
-      // Regular users can see their team members only
-      users = await usersCollection.find({ 
-        $or: [
-          { teamId: requestingUserTeamId }, // Same teamId
-          { 
-            teamId: { $exists: false }, 
-            email: { $regex: `@${requestingUserDomain}$` } 
-          }, // Same domain for users without teamId
-          { 
-            teamId: null, 
-            email: { $regex: `@${requestingUserDomain}$` } 
-          } // Handle null teamId
-        ]
-      }).toArray();
+    if (requestingUser.role === 'admin' || requestingUser.role === 'user') {
+      // Only show users strictly within the same teamId
+      users = await usersCollection.find({ teamId: requestingUserTeamId }).toArray();
     } else {
       // Viewers can only see themselves
       users = await usersCollection.find({ email: requestingUserEmail }).toArray();

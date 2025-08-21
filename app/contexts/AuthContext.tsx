@@ -50,12 +50,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const createUserProfile = async (firebaseUser: User): Promise<UserProfile | null> => {
     try {
       const emailDomain = firebaseUser.email!.split('@')[1];
+
+      // Read team override saved during sign-up flow (if any)
+      let teamOverride: string | null = null;
+      if (typeof window !== 'undefined') {
+        try {
+          teamOverride = sessionStorage.getItem('pendingTeamId');
+          if (teamOverride) {
+            sessionStorage.removeItem('pendingTeamId');
+          }
+        } catch {}
+      }
+
+      const teamIdFinal = (teamOverride && teamOverride.trim()) || emailDomain;
+
       const newUserProfile: Omit<UserProfile, 'permissions'> = {
         uid: firebaseUser.uid,
         email: firebaseUser.email!,
         displayName: firebaseUser.displayName || '',
         role: DEFAULT_ROLE,
-        teamId: emailDomain, // Use email domain as default team identifier
+        teamId: teamIdFinal, // Prefer user-provided team; fallback to email domain
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         isActive: true,
