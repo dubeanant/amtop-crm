@@ -231,25 +231,38 @@ export default function PipelinePage() {
   });
 
   const fetchSteps = async () => {
-    if (!user?.organizationId) return;
+    console.log('🔍 fetchSteps called with user:', user);
+    console.log('🔍 user.organizationId:', user?.organizationId);
+    
+    if (!user?.organizationId) {
+      console.log('❌ No organizationId found, stopping fetch');
+      setLoading(false);
+      setError('No organization ID found. Please ensure you are part of an organization.');
+      return;
+    }
 
     try {
       setLoading(true);
+      console.log('📡 Fetching steps for organization:', user.organizationId);
       const response = await fetch(`/api/pipeline/steps?organizationId=${user.organizationId}`);
       const data = await response.json();
+      console.log('📡 API response:', data);
       
       if (data.success) {
         if (data.steps.length === 0) {
+          console.log('📝 No steps found, creating defaults');
           // Create default steps for new organizations
           await createDefaultSteps();
         } else {
+          console.log('✅ Steps loaded:', data.steps);
           setSteps(data.steps);
         }
       } else {
+        console.error('❌ API error:', data.error);
         setError(data.error || 'Failed to load pipeline configuration');
       }
     } catch (error) {
-      console.error('Error fetching pipeline steps:', error);
+      console.error('❌ Error fetching pipeline steps:', error);
       setError('Failed to load pipeline configuration');
     } finally {
       setLoading(false);
@@ -715,9 +728,13 @@ export default function PipelinePage() {
   };
 
   useEffect(() => {
+    console.log('🔄 useEffect triggered with user:', user);
     if (user) {
+      console.log('👤 User found, fetching data...');
       fetchSteps();
       fetchTags();
+    } else {
+      console.log('❌ No user found');
     }
   }, [user]);
 

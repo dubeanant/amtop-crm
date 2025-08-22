@@ -20,21 +20,21 @@ export async function PUT(
       }, { status: 500 });
     }
 
-    const { id: leadId } = await params;
+    const { id: audienceId } = await params;
     const updateData = await req.json();
     
-    if (!leadId) {
+    if (!audienceId) {
       return NextResponse.json({ 
         success: false, 
-        error: "Lead ID is required" 
+        error: "Audience ID is required" 
       }, { status: 400 });
     }
 
     // Validate ObjectId format
-    if (!ObjectId.isValid(leadId)) {
+    if (!ObjectId.isValid(audienceId)) {
       return NextResponse.json({ 
         success: false, 
-        error: "Invalid lead ID format" 
+        error: "Invalid audience ID format" 
       }, { status: 400 });
     }
 
@@ -44,27 +44,27 @@ export async function PUT(
     const db = client.db(dbName);
     const collection = db.collection("leads");
     
-    // Find the lead first to check ownership
-    const existingLead = await collection.findOne({ _id: new ObjectId(leadId) });
+    // Find the audience member first to check ownership
+    const existingAudience = await collection.findOne({ _id: new ObjectId(audienceId) });
     
-    if (!existingLead) {
+    if (!existingAudience) {
       return NextResponse.json({ 
         success: false, 
-        error: "Lead not found" 
+        error: "Audience member not found" 
       }, { status: 404 });
     }
 
-    // For now, allow updates from the same user who uploaded the lead
+    // For now, allow updates from the same user who uploaded the audience member
     // In the future, you can add more sophisticated permission checking here
     const result = await collection.updateOne(
-      { _id: new ObjectId(leadId) },
+      { _id: new ObjectId(audienceId) },
       { $set: updateData }
     );
     
     if (result.matchedCount === 0) {
       return NextResponse.json({ 
         success: false, 
-        error: "Lead not found" 
+        error: "Audience member not found" 
       }, { status: 404 });
     }
     
@@ -102,7 +102,7 @@ export async function DELETE(
     // Get user email from query parameters
     const { searchParams } = new URL(req.url);
     const userEmail = searchParams.get('userEmail');
-    const { id: leadId } = await params;
+    const { id: audienceId } = await params;
     
     if (!userEmail) {
       return NextResponse.json({ 
@@ -111,18 +111,18 @@ export async function DELETE(
       }, { status: 400 });
     }
 
-    if (!leadId) {
+    if (!audienceId) {
       return NextResponse.json({ 
         success: false, 
-        error: "Lead ID is required" 
+        error: "Audience ID is required" 
       }, { status: 400 });
     }
 
     // Validate ObjectId format
-    if (!ObjectId.isValid(leadId)) {
+    if (!ObjectId.isValid(audienceId)) {
       return NextResponse.json({ 
         success: false, 
-        error: "Invalid lead ID format" 
+        error: "Invalid audience ID format" 
       }, { status: 400 });
     }
 
@@ -132,16 +132,16 @@ export async function DELETE(
     const db = client.db(dbName);
     const collection = db.collection("leads");
     
-    // Only delete the specific lead if it belongs to the user
+    // Only delete the specific audience member if it belongs to the user
     const result = await collection.deleteOne({ 
-      _id: new ObjectId(leadId),
+      _id: new ObjectId(audienceId),
       uploadedBy: userEmail 
     });
     
     if (result.deletedCount === 0) {
       return NextResponse.json({ 
         success: false, 
-        error: "Lead not found or you don't have permission to delete it" 
+        error: "Audience member not found or you don't have permission to delete it" 
       }, { status: 404 });
     }
     

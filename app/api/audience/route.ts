@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { MongoClient } from "mongodb";
 import { UserRole, ROLE_PERMISSIONS } from "../../types/auth";
 
-interface Lead {
+interface Audience {
   Name?: string;
   Number?: string;
   Email?: string;
@@ -16,7 +16,7 @@ interface Lead {
   [key: string]: any; // Allow for additional fields
 }
 
-interface LeadWithUserInfo extends Lead {
+interface AudienceWithUserInfo extends Audience {
   uploadedBy: string;
   uploadedAt: string;
   stage: 'lead' | 'engaged' | 'warm';
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     }
 
     const requestData = await req.json();
-    const { leads, userEmail } = requestData;
+    const { audience, userEmail } = requestData;
     
     if (!userEmail) {
       return NextResponse.json({ 
@@ -50,41 +50,40 @@ export async function POST(req: NextRequest) {
     }
 
     // Filter out empty rows that Papa Parse might include
-    const validLeads = leads.filter((lead: Lead) => {
-      if (!lead) return false;
+    const validAudience = audience.filter((audienceMember: Audience) => {
+      if (!audienceMember) return false;
       
-      // Check for any non-empty field - specifically looking for Name, Number, Email, Bio fields
+      // Check for any non-empty field - specifically looking for Name, Email, Bio fields
       const hasValidData = (
-        (lead.Name && lead.Name.trim() !== '') ||
-        (lead.Number && lead.Number.trim() !== '') ||
-        (lead.Email && lead.Email.trim() !== '') ||
-        (lead.Bio && lead.Bio.trim() !== '') ||
+        (audienceMember.Name && audienceMember.Name.trim() !== '') ||
+        (audienceMember.Email && audienceMember.Email.trim() !== '') ||
+        (audienceMember.Bio && audienceMember.Bio.trim() !== '') ||
         // Also check lowercase versions for compatibility
-        (lead.name && lead.name.trim() !== '') ||
-        (lead.number && lead.number.trim() !== '') ||
-        (lead.email && lead.email.trim() !== '') ||
-        (lead.bio && lead.bio.trim() !== '') ||
-        (lead.biography && lead.biography.trim() !== '') ||
-        (lead.Biography && lead.Biography.trim() !== '')
+        (audienceMember.name && audienceMember.name.trim() !== '') ||
+        (audienceMember.email && audienceMember.email.trim() !== '') ||
+        (audienceMember.bio && audienceMember.bio.trim() !== '') ||
+        (audienceMember.biography && audienceMember.biography.trim() !== '') ||
+        (audienceMember.Biography && audienceMember.Biography.trim() !== '')
       );
       
       return hasValidData;
     });
     
-    // Add user info, timestamp, and default stage to each lead
-    const leadsWithUserInfo: LeadWithUserInfo[] = validLeads.map((lead: Lead) => ({
-      ...lead,
+    // Add user info, timestamp, and default stage to each audience member
+    const audienceWithUserInfo: AudienceWithUserInfo[] = validAudience.map((audienceMember: Audience) => ({
+      ...audienceMember,
       uploadedBy: userEmail,
       uploadedAt: new Date().toISOString(),
-      stage: 'lead', // Default stage for new leads
+      stage: 'New', // Default stage for new audience members
       stageUpdatedAt: new Date().toISOString(),
-      stageUpdatedBy: userEmail
+      stageUpdatedBy: userEmail,
+      tag: audienceMember.tag || 'Untagged' // Add tag field
     }));
 
-    if (leadsWithUserInfo.length === 0) {
+    if (audienceWithUserInfo.length === 0) {
       return NextResponse.json({ 
         success: false, 
-        error: "No valid leads found in the data" 
+        error: "No valid audience members found in the data" 
       }, { status: 400 });
     }
 
@@ -94,7 +93,7 @@ export async function POST(req: NextRequest) {
     const db = client.db(dbName);
     const collection = db.collection("leads");
     
-    const result = await collection.insertMany(leadsWithUserInfo);
+    const result = await collection.insertMany(audienceWithUserInfo);
     
     return NextResponse.json({ 
       success: true, 
@@ -152,22 +151,22 @@ export async function GET(req: NextRequest) {
       }, { status: 404 });
     }
 
-    // Check permissions and get appropriate leads
+    // Check permissions and get appropriate audience members
     const userPermissions = ROLE_PERMISSIONS[requestingUser.role as UserRole] || [];
     const canViewAll = userPermissions.some(p => 
-      p.resource === 'leads' && (p.actions.includes('manage_all') || p.actions.includes('view_team'))
+      p.resource === 'audience' && (p.actions.includes('manage_all') || p.actions.includes('view_team'))
     );
 
-    let leads;
+    let audience;
     if (canViewAll && requestingUser.role === 'admin') {
-      // Admin can see all leads
-      leads = await collection.find({}).toArray();
+      // Admin can see all audience members
+      audience = await collection.find({}).toArray();
     } else {
-      // Regular users can only see their own leads
-      leads = await collection.find({ uploadedBy: userEmail }).toArray();
+      // Regular users can only see their own audience members
+      audience = await collection.find({ uploadedBy: userEmail }).toArray();
     }
     
-    return NextResponse.json(leads);
+    return NextResponse.json(audience);
   } catch (error) {
     return NextResponse.json({ 
       success: false, 
@@ -220,18 +219,18 @@ export async function DELETE(req: NextRequest) {
       }, { status: 404 });
     }
 
-    // Check permissions and delete appropriate leads
+    // Check permissions and delete appropriate audience members
     const userPermissions = ROLE_PERMISSIONS[requestingUser.role as UserRole] || [];
     const canDeleteAll = userPermissions.some(p => 
-      p.resource === 'leads' && (p.actions.includes('manage_all') || p.actions.includes('delete_team'))
+      p.resource === 'audience' && (p.actions.includes('manage_all') || p.actions.includes('delete_team'))
     );
 
     let result;
     if (canDeleteAll && requestingUser.role === 'admin') {
-      // Admin can delete all leads
+      // Admin can delete all audience members
       result = await collection.deleteMany({});
     } else {
-      // Regular users can only delete their own leads
+      // Regular users can only delete their own audience members
       result = await collection.deleteMany({ uploadedBy: userEmail });
     }
     

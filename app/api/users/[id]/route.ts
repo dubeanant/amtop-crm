@@ -52,6 +52,8 @@ export async function GET(
       email: user.email,
       displayName: user.displayName,
       role: user.role,
+      organizationId: user.organizationId || user.teamId, // Include organizationId with fallback
+      organizations: user.organizations || [],
       isActive: user.isActive,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

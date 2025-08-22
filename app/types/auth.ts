@@ -36,20 +36,20 @@ export interface AuthContextType {
 // Role-based permissions configuration
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   admin: [
-    { resource: 'leads', actions: ['create', 'read', 'update', 'delete', 'manage_all'] },
+    { resource: 'audience', actions: ['create', 'read', 'update', 'delete', 'manage_all'] },
     { resource: 'users', actions: ['create', 'read', 'update', 'delete', 'manage_roles'] },
     { resource: 'pipeline', actions: ['create', 'read', 'update', 'delete', 'manage_stages'] },
     { resource: 'analytics', actions: ['read', 'export'] },
     { resource: 'settings', actions: ['read', 'update'] },
   ],
   user: [
-    { resource: 'leads', actions: ['create', 'read', 'update', 'delete', 'view_own'] },
+    { resource: 'audience', actions: ['create', 'read', 'update', 'delete', 'view_own'] },
     { resource: 'users', actions: ['read', 'view_team'] },
     { resource: 'pipeline', actions: ['create', 'read', 'update', 'delete'] },
     { resource: 'analytics', actions: ['read_own'] },
   ],
   viewer: [
-    { resource: 'leads', actions: ['read', 'view_own'] },
+    { resource: 'audience', actions: ['read', 'view_own'] },
     { resource: 'pipeline', actions: ['read'] },
     { resource: 'analytics', actions: ['read_own'] },
   ],
