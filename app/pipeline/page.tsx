@@ -231,54 +231,22 @@ export default function PipelinePage() {
   });
 
   const fetchSteps = async () => {
-    if (!user?.email) return;
+    if (!user?.organizationId) return;
 
     try {
       setLoading(true);
-      // For now, we'll use localStorage to store pipeline steps
-      // In a real app, this would be an API call
-      const savedSteps = localStorage.getItem(`pipeline_steps_${user.email}`);
-      if (savedSteps) {
-        setSteps(JSON.parse(savedSteps));
+      const response = await fetch(`/api/pipeline/steps?organizationId=${user.organizationId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        if (data.steps.length === 0) {
+          // Create default steps for new organizations
+          await createDefaultSteps();
+        } else {
+          setSteps(data.steps);
+        }
       } else {
-        // Default steps for new users
-        const defaultSteps: PipelineStep[] = [
-          {
-            id: '1',
-            title: 'New Leads',
-            description: 'Fresh leads from various sources',
-            color: 'blue',
-            bgColor: 'bg-blue-50',
-            borderColor: 'border-blue-200',
-            order: 1,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          },
-          {
-            id: '2',
-            title: 'Contacted',
-            description: 'Leads that have been reached out to',
-            color: 'yellow',
-            bgColor: 'bg-yellow-50',
-            borderColor: 'border-yellow-200',
-            order: 2,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          },
-          {
-            id: '3',
-            title: 'Qualified',
-            description: 'Leads that meet our criteria',
-            color: 'green',
-            bgColor: 'bg-green-50',
-            borderColor: 'border-green-200',
-            order: 3,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          }
-        ];
-        setSteps(defaultSteps);
-        localStorage.setItem(`pipeline_steps_${user.email}`, JSON.stringify(defaultSteps));
+        setError(data.error || 'Failed to load pipeline configuration');
       }
     } catch (error) {
       console.error('Error fetching pipeline steps:', error);
@@ -288,13 +256,62 @@ export default function PipelinePage() {
     }
   };
 
-  const fetchTags = async () => {
-    if (!user?.email) return;
+  const createDefaultSteps = async () => {
+    const defaultStepsData = [
+      {
+        title: 'New Leads',
+        description: 'Fresh leads from various sources',
+        color: 'blue',
+        bgColor: 'bg-blue-50',
+        borderColor: 'border-blue-200'
+      },
+      {
+        title: 'Contacted',
+        description: 'Leads that have been reached out to',
+        color: 'yellow',
+        bgColor: 'bg-yellow-50',
+        borderColor: 'border-yellow-200'
+      },
+      {
+        title: 'Qualified',
+        description: 'Leads that meet our criteria',
+        color: 'green',
+        bgColor: 'bg-green-50',
+        borderColor: 'border-green-200'
+      }
+    ];
 
     try {
-      const savedTags = localStorage.getItem(`pipeline_tags_${user.email}`);
-      if (savedTags) {
-        setTags(JSON.parse(savedTags));
+      const response = await fetch('/api/pipeline/steps/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          steps: defaultStepsData,
+          organizationId: user?.organizationId,
+          createdBy: user?.uid || user?.email
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setSteps(data.steps);
+      }
+    } catch (error) {
+      console.error('Error creating default steps:', error);
+    }
+  };
+
+  const fetchTags = async () => {
+    if (!user?.organizationId) return;
+
+    try {
+      const response = await fetch(`/api/pipeline/tags?organizationId=${user.organizationId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setTags(data.tags);
+      } else {
+        setError(data.error || 'Failed to load tags');
       }
     } catch (error) {
       console.error('Error fetching tags:', error);
@@ -303,38 +320,55 @@ export default function PipelinePage() {
   };
 
   const saveSteps = (updatedSteps: PipelineStep[]) => {
-    if (!user?.email) return;
-    localStorage.setItem(`pipeline_steps_${user.email}`, JSON.stringify(updatedSteps));
     setSteps(updatedSteps);
   };
 
-  const addStep = () => {
+  const addStep = async () => {
     if (!newStep.title.trim()) {
       setError('Step title is required');
       return;
     }
 
-    const colorConfig = colorOptions.find(c => c.value === newStep.color) || colorOptions[0];
-    const step: PipelineStep = {
-      id: Date.now().toString(),
-      title: newStep.title.trim(),
-      description: newStep.description.trim(),
-      color: newStep.color,
-      bgColor: colorConfig.bgColor,
-      borderColor: colorConfig.borderColor,
-      order: steps.length + 1,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    if (!user?.organizationId) {
+      setError('Organization ID is required');
+      return;
+    }
 
-    const updatedSteps = [...steps, step];
-    saveSteps(updatedSteps);
-    setNewStep({ title: '', description: '', color: 'blue', template: '' });
-    setShowAddForm(false);
-    setError('');
+    try {
+      const colorConfig = colorOptions.find(c => c.value === newStep.color) || colorOptions[0];
+      
+      const response = await fetch('/api/pipeline/steps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newStep.title.trim(),
+          description: newStep.description.trim(),
+          color: newStep.color,
+          bgColor: colorConfig.bgColor,
+          borderColor: colorConfig.borderColor,
+          organizationId: user.organizationId,
+          createdBy: user.uid || user.email
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        const updatedSteps = [...steps, data.step];
+        saveSteps(updatedSteps);
+        setNewStep({ title: '', description: '', color: 'blue', template: '' });
+        setShowAddForm(false);
+        setError('');
+      } else {
+        setError(data.error || 'Failed to create pipeline step');
+      }
+    } catch (error) {
+      console.error('Error adding step:', error);
+      setError('Failed to create pipeline step');
+    }
   };
 
-  const addBulkSteps = () => {
+  const addBulkSteps = async () => {
     const validSteps = bulkSteps.steps.filter(step => step.title.trim());
     
     if (validSteps.length === 0) {
@@ -342,32 +376,54 @@ export default function PipelinePage() {
       return;
     }
 
-    const newSteps: PipelineStep[] = validSteps.map((step, index) => {
-      const colorConfig = colorOptions.find(c => c.value === step.color) || colorOptions[0];
-      return {
-        id: (Date.now() + index).toString(),
-        title: step.title.trim(),
-        description: step.description.trim(),
-        color: step.color,
-        bgColor: colorConfig.bgColor,
-        borderColor: colorConfig.borderColor,
-        order: steps.length + index + 1,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-    });
+    if (!user?.organizationId) {
+      setError('Organization ID is required');
+      return;
+    }
 
-    const updatedSteps = [...steps, ...newSteps];
-    saveSteps(updatedSteps);
-    setBulkSteps({
-      steps: [
-        { title: '', description: '', color: 'blue', template: '' },
-        { title: '', description: '', color: 'green', template: '' },
-        { title: '', description: '', color: 'yellow', template: '' }
-      ]
-    });
-    setShowBulkForm(false);
-    setError('');
+    try {
+      const stepsData = validSteps.map(step => {
+        const colorConfig = colorOptions.find(c => c.value === step.color) || colorOptions[0];
+        return {
+          title: step.title.trim(),
+          description: step.description.trim(),
+          color: step.color,
+          bgColor: colorConfig.bgColor,
+          borderColor: colorConfig.borderColor
+        };
+      });
+
+      const response = await fetch('/api/pipeline/steps/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          steps: stepsData,
+          organizationId: user.organizationId,
+          createdBy: user.uid || user.email
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        const updatedSteps = [...steps, ...data.steps];
+        saveSteps(updatedSteps);
+        setBulkSteps({
+          steps: [
+            { title: '', description: '', color: 'blue', template: '' },
+            { title: '', description: '', color: 'green', template: '' },
+            { title: '', description: '', color: 'yellow', template: '' }
+          ]
+        });
+        setShowBulkForm(false);
+        setError('');
+      } else {
+        setError(data.error || 'Failed to create pipeline steps');
+      }
+    } catch (error) {
+      console.error('Error adding bulk steps:', error);
+      setError('Failed to create pipeline steps');
+    }
   };
 
   const addBulkStepRow = () => {
@@ -426,37 +482,85 @@ export default function PipelinePage() {
     setBulkSteps({ steps: updatedSteps });
   };
 
-  const updateStep = (stepId: string, updates: Partial<PipelineStep>) => {
-    const updatedSteps = steps.map(step => 
-      step.id === stepId 
-        ? { ...step, ...updates, updatedAt: new Date().toISOString() }
-        : step
-    );
-    saveSteps(updatedSteps);
-    setEditingStep(null);
+  const updateStep = async (stepId: string, updates: Partial<PipelineStep>) => {
+    if (!user?.organizationId) {
+      setError('Organization ID is required');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/pipeline/steps/${stepId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...updates,
+          organizationId: user.organizationId
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        const updatedSteps = steps.map(step => 
+          step.id === stepId 
+            ? { ...step, ...updates, updatedAt: new Date().toISOString() }
+            : step
+        );
+        saveSteps(updatedSteps);
+        setEditingStep(null);
+      } else {
+        setError(data.error || 'Failed to update pipeline step');
+      }
+    } catch (error) {
+      console.error('Error updating step:', error);
+      setError('Failed to update pipeline step');
+    }
   };
 
-  const deleteStep = (stepId: string) => {
+  const deleteStep = async (stepId: string) => {
     if (steps.length <= 1) {
       setError('You must have at least one pipeline step');
       return;
     }
+
+    if (!user?.organizationId) {
+      setError('Organization ID is required');
+      return;
+    }
     
-    const updatedSteps = steps.filter(step => step.id !== stepId);
-    // Reorder remaining steps
-    const reorderedSteps = updatedSteps.map((step, index) => ({
-      ...step,
-      order: index + 1,
-      updatedAt: new Date().toISOString()
-    }));
-    saveSteps(reorderedSteps);
+    try {
+      const response = await fetch(`/api/pipeline/steps/${stepId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: user.organizationId
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Refresh steps from server to get updated order
+        await fetchSteps();
+      } else {
+        setError(data.error || 'Failed to delete pipeline step');
+      }
+    } catch (error) {
+      console.error('Error deleting step:', error);
+      setError('Failed to delete pipeline step');
+    }
   };
 
-  const reorderSteps = (draggedStepId: string, targetStepId: string) => {
+  const reorderSteps = async (draggedStepId: string, targetStepId: string) => {
     const draggedIndex = steps.findIndex(s => s.id === draggedStepId);
     const targetIndex = steps.findIndex(s => s.id === targetStepId);
     
     if (draggedIndex === -1 || targetIndex === -1) return;
+
+    if (!user?.organizationId) {
+      setError('Organization ID is required');
+      return;
+    }
 
     const newSteps = [...steps];
     const [draggedStep] = newSteps.splice(draggedIndex, 1);
@@ -469,16 +573,39 @@ export default function PipelinePage() {
       updatedAt: new Date().toISOString()
     }));
 
+    // Optimistically update UI
     saveSteps(reorderedSteps);
+
+    try {
+      const response = await fetch('/api/pipeline/steps', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          steps: reorderedSteps,
+          organizationId: user.organizationId
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        setError(data.error || 'Failed to reorder pipeline steps');
+        // Revert on error
+        await fetchSteps();
+      }
+    } catch (error) {
+      console.error('Error reordering steps:', error);
+      setError('Failed to reorder pipeline steps');
+      // Revert on error
+      await fetchSteps();
+    }
   };
 
   const saveTags = (updatedTags: Tag[]) => {
-    if (!user?.email) return;
-    localStorage.setItem(`pipeline_tags_${user.email}`, JSON.stringify(updatedTags));
     setTags(updatedTags);
   };
 
-  const addTag = () => {
+  const addTag = async () => {
     if (!newTag.name.trim()) {
       setError('Tag name is required');
       return;
@@ -489,40 +616,102 @@ export default function PipelinePage() {
       return;
     }
 
-    // Check for duplicate tag names
-    if (tags.some(tag => tag.name.toLowerCase() === newTag.name.trim().toLowerCase())) {
-      setError('A tag with this name already exists');
+    if (!user?.organizationId) {
+      setError('Organization ID is required');
       return;
     }
 
-    const tag: Tag = {
-      id: Date.now().toString(),
-      name: newTag.name.trim(),
-      description: newTag.description.trim(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    try {
+      const response = await fetch('/api/pipeline/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newTag.name.trim(),
+          description: newTag.description.trim(),
+          organizationId: user.organizationId,
+          createdBy: user.uid || user.email
+        })
+      });
 
-    const updatedTags = [...tags, tag];
-    saveTags(updatedTags);
-    setNewTag({ name: '', description: '' });
-    setShowAddTagForm(false);
-    setError('');
+      const data = await response.json();
+      
+      if (data.success) {
+        const updatedTags = [...tags, data.tag];
+        saveTags(updatedTags);
+        setNewTag({ name: '', description: '' });
+        setShowAddTagForm(false);
+        setError('');
+      } else {
+        setError(data.error || 'Failed to create tag');
+      }
+    } catch (error) {
+      console.error('Error adding tag:', error);
+      setError('Failed to create tag');
+    }
   };
 
-  const updateTag = (tagId: string, updates: Partial<Tag>) => {
-    const updatedTags = tags.map(tag => 
-      tag.id === tagId 
-        ? { ...tag, ...updates, updatedAt: new Date().toISOString() }
-        : tag
-    );
-    saveTags(updatedTags);
-    setEditingTag(null);
+  const updateTag = async (tagId: string, updates: Partial<Tag>) => {
+    if (!user?.organizationId) {
+      setError('Organization ID is required');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/pipeline/tags/${tagId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...updates,
+          organizationId: user.organizationId
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        const updatedTags = tags.map(tag => 
+          tag.id === tagId 
+            ? { ...tag, ...updates, updatedAt: new Date().toISOString() }
+            : tag
+        );
+        saveTags(updatedTags);
+        setEditingTag(null);
+      } else {
+        setError(data.error || 'Failed to update tag');
+      }
+    } catch (error) {
+      console.error('Error updating tag:', error);
+      setError('Failed to update tag');
+    }
   };
 
-  const deleteTag = (tagId: string) => {
-    const updatedTags = tags.filter(tag => tag.id !== tagId);
-    saveTags(updatedTags);
+  const deleteTag = async (tagId: string) => {
+    if (!user?.organizationId) {
+      setError('Organization ID is required');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/pipeline/tags/${tagId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId: user.organizationId
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        const updatedTags = tags.filter(tag => tag.id !== tagId);
+        saveTags(updatedTags);
+      } else {
+        setError(data.error || 'Failed to delete tag');
+      }
+    } catch (error) {
+      console.error('Error deleting tag:', error);
+      setError('Failed to delete tag');
+    }
   };
 
   useEffect(() => {

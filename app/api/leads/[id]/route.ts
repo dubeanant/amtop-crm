@@ -86,7 +86,7 @@ export async function PUT(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let client: MongoClient | null = null;
   
@@ -102,7 +102,7 @@ export async function DELETE(
     // Get user email from query parameters
     const { searchParams } = new URL(req.url);
     const userEmail = searchParams.get('userEmail');
-    const leadId = params.id;
+    const { id: leadId } = await params;
     
     if (!userEmail) {
       return NextResponse.json({ 

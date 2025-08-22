@@ -6,7 +6,9 @@ export interface UserProfile {
   email: string;
   displayName?: string;
   role: UserRole;
-  teamId?: string; // Organization/Team identifier
+  organizationId?: string; // Current active organization identifier
+  organizations?: string[]; // Array of organization IDs the user belongs to
+  teamId?: string; // Backward compatibility
   createdAt: string;
   updatedAt: string;
   isActive: boolean;
@@ -21,11 +23,14 @@ export interface Permission {
 export interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
+  needsOnboarding: boolean;
+  firebaseUser: any; // Firebase User type
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName?: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserRole: (userId: string, role: UserRole) => Promise<void>;
   hasPermission: (resource: string, action: string) => boolean;
+  completeOnboarding: (companyName: string) => Promise<void>;
 }
 
 // Role-based permissions configuration

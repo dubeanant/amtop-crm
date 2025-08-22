@@ -1,15 +1,29 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
+import { CreateOrganizationModal } from '../teams/CreateTeamModal';
 
 interface HeaderProps {
   onMenuClick: () => void;
 }
 
+interface Organization {
+  id: string;
+  name: string;
+  userRole: string;
+  isActive: boolean;
+  isCurrent: boolean;
+  memberCount?: number;
+}
+
 export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const { user, signOut } = useAuth();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isCreateOrganizationModalOpen, setIsCreateOrganizationModalOpen] = useState(false);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [currentOrganization, setCurrentOrganization] = useState<Organization | null>(null);
+  const [loadingOrganizations, setLoadingOrganizations] = useState(false);
   const router = useRouter();
 
   const handleSignOut = async () => {
@@ -21,6 +35,59 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       console.error('Sign out error:', error);
     }
   };
+
+  const fetchUserOrganizations = async () => {
+    if (!user?.email) return;
+    
+    try {
+      setLoadingOrganizations(true);
+      const response = await fetch(`/api/users/organizations?userEmail=${encodeURIComponent(user.email)}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setOrganizations(data.organizations || []);
+        setCurrentOrganization(data.currentOrganization || null);
+      }
+    } catch (error) {
+      console.error('Error fetching organizations:', error);
+    } finally {
+      setLoadingOrganizations(false);
+    }
+  };
+
+  const handleSwitchOrganization = async (organizationId: string) => {
+    if (!user?.email) return;
+    
+    try {
+      const response = await fetch('/api/users/switch-organization', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userEmail: user.email,
+          organizationId
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Refresh the page to load the new organization context
+        window.location.reload();
+      } else {
+        alert('Failed to switch organization: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error switching organization:', error);
+      alert('Failed to switch organization');
+    }
+  };
+
+  // Fetch organizations when user changes or profile menu opens
+  useEffect(() => {
+    if (user?.email && isProfileMenuOpen) {
+      fetchUserOrganizations();
+    }
+  }, [user?.email, isProfileMenuOpen]);
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
@@ -84,7 +151,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
             {/* Dropdown menu */}
             {isProfileMenuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+              <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
                 <div className="px-4 py-2 border-b border-gray-200">
                   <p className="text-sm font-medium text-gray-900">
                     {user?.displayName || user?.email}
@@ -92,7 +159,67 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                   <p className="text-xs text-gray-500 capitalize">
                     {user?.role} Account
                   </p>
+                  {currentOrganization && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      {currentOrganization.name}
+                    </p>
+                  )}
                 </div>
+
+                {/* Organizations Section */}
+                {organizations.length > 0 && (
+                  <>
+                    <div className="px-4 py-2 border-b border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Your Organizations
+                        </p>
+                        <span className="text-xs text-gray-400">
+                          {organizations.length}/3
+                        </span>
+                      </div>
+                      {loadingOrganizations ? (
+                        <div className="flex items-center justify-center py-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          {organizations.map((org) => (
+                            <button
+                              key={org.id}
+                              onClick={() => {
+                                if (!org.isCurrent) {
+                                  handleSwitchOrganization(org.id);
+                                }
+                                setIsProfileMenuOpen(false);
+                              }}
+                              className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
+                                org.isCurrent
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                  : 'text-gray-700 hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="font-medium truncate">{org.name}</p>
+                                  <p className="text-xs text-gray-500 capitalize">
+                                    {org.userRole}
+                                  </p>
+                                </div>
+                                {org.isCurrent && (
+                                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
                 <a
                   href="/profile"
                   className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -107,6 +234,36 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                 >
                   Settings
                 </a>
+                <div className="border-t border-gray-200 my-1"></div>
+                <button
+                  onClick={() => {
+                    if (organizations.length >= 3) {
+                      alert('You have reached the maximum limit of 3 organizations. Please contact support if you need more.');
+                      return;
+                    }
+                    setIsProfileMenuOpen(false);
+                    setIsCreateOrganizationModalOpen(true);
+                  }}
+                  disabled={organizations.length >= 3}
+                  className={`block w-full text-left px-4 py-2 text-sm font-medium ${
+                    organizations.length >= 3
+                      ? 'text-gray-400 cursor-not-allowed'
+                      : 'text-blue-600 hover:bg-blue-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span>Create New Organization</span>
+                    </div>
+                    {organizations.length >= 3 && (
+                      <span className="text-xs text-gray-400">Limit reached</span>
+                    )}
+                  </div>
+                </button>
+                <div className="border-t border-gray-200 my-1"></div>
                 <button
                   onClick={handleSignOut}
                   className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -118,6 +275,17 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           </div>
         </div>
       </div>
+
+      {/* Create Organization Modal */}
+      <CreateOrganizationModal
+        isOpen={isCreateOrganizationModalOpen}
+        onClose={() => setIsCreateOrganizationModalOpen(false)}
+        onOrganizationCreated={() => {
+          // Refresh organizations list
+          fetchUserOrganizations();
+          console.log('Organization created successfully');
+        }}
+      />
     </header>
   );
 };

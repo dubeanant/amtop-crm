@@ -10,7 +10,8 @@ interface User {
   email: string;
   displayName: string;
   role: UserRole;
-  teamId?: string;
+  organizationId?: string;
+  teamId?: string; // backward compatibility
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -201,9 +202,9 @@ export default function UsersPage() {
                 <p className="text-gray-600 mt-1">
                   Manage your team members and their roles
                 </p>
-                {user?.teamId && (
+                {(user?.organizationId || user?.teamId) && (
                   <p className="text-sm text-blue-600 mt-1">
-                    Team: {user.teamId}
+                    Organization: {user.organizationId || user.teamId}
                   </p>
                 )}
               </div>
@@ -316,9 +317,6 @@ export default function UsersPage() {
                       Role
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Team
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
@@ -371,11 +369,6 @@ export default function UsersPage() {
                             </div>
                           </div>
                         </RoleGuard>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                          {userItem.teamId || 'No team'}
-                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeColor(userItem.isActive)}`}>

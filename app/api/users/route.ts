@@ -59,14 +59,18 @@ export async function GET(req: NextRequest) {
       }, { status: 403 });
     }
 
-    // Get users based on role permissions and team membership
+    // Get users based on role permissions and organization membership
     let users;
-    const requestingUserDomain = requestingUser.email.split('@')[1];
-    const requestingUserTeamId = requestingUser.teamId || requestingUserDomain;
+    const requestingUserOrgId = requestingUser.organizationId || requestingUser.teamId; // backward compatibility
     
     if (requestingUser.role === 'admin' || requestingUser.role === 'user') {
-      // Only show users strictly within the same teamId
-      users = await usersCollection.find({ teamId: requestingUserTeamId }).toArray();
+      // Only show users strictly within the same organization
+      users = await usersCollection.find({ 
+        $or: [
+          { organizationId: requestingUserOrgId },
+          { teamId: requestingUserOrgId } // backward compatibility
+        ]
+      }).toArray();
     } else {
       // Viewers can only see themselves
       users = await usersCollection.find({ email: requestingUserEmail }).toArray();
@@ -78,7 +82,8 @@ export async function GET(req: NextRequest) {
       email: user.email,
       displayName: user.displayName,
       role: user.role,
-      teamId: user.teamId,
+      organizationId: user.organizationId || user.teamId, // backward compatibility
+      teamId: user.teamId, // keep for backward compatibility
       isActive: user.isActive,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt
@@ -141,17 +146,14 @@ export async function POST(req: NextRequest) {
     // Check if this is the first user (make them admin)
     const userCount = await usersCollection.countDocuments();
     const role = userCount === 0 ? 'admin' : (userData.role || DEFAULT_ROLE);
-    
-    // Generate team ID based on email domain or use provided teamId
-    const emailDomain = userData.email.split('@')[1];
-    const teamId = userData.teamId || emailDomain;
 
     const newUser: UserProfile = {
       uid: userData.uid,
       email: userData.email,
       displayName: userData.displayName || '',
       role: role as UserRole,
-      teamId: teamId,
+      organizationId: userData.organizationId || userData.teamId, // support both
+      organizations: userData.organizations || (userData.organizationId ? [userData.organizationId] : []),
       createdAt: userData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       isActive: true,
@@ -168,7 +170,8 @@ export async function POST(req: NextRequest) {
         email: newUser.email,
         displayName: newUser.displayName,
         role: newUser.role,
-        teamId: newUser.teamId,
+        organizationId: newUser.organizationId,
+        organizations: newUser.organizations,
         isActive: newUser.isActive,
         createdAt: newUser.createdAt,
         updatedAt: newUser.updatedAt

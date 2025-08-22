@@ -104,6 +104,13 @@ export async function PUT(
     // Get updated user
     const updatedUser = await usersCollection.findOne({ uid: userId });
     
+    if (!updatedUser) {
+      return NextResponse.json({ 
+        success: false, 
+        error: "User not found after update" 
+      }, { status: 404 });
+    }
+    
     return NextResponse.json({
       success: true,
       user: {

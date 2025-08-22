@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
+import { OnboardingModal } from '../onboarding/OnboardingModal';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -11,8 +12,16 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { user, loading } = useAuth();
+  const [isClient, setIsClient] = useState(false);
+  const { user, loading, needsOnboarding, completeOnboarding, firebaseUser } = useAuth();
   const router = useRouter();
+
+  // Fix hydration mismatch by ensuring client-side rendering
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+
 
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
@@ -22,15 +31,21 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     setIsSidebarOpen(false);
   };
 
-  // Redirect to sign-in if user is not authenticated
+  const handleOnboardingComplete = async (companyName: string) => {
+    await completeOnboarding(companyName);
+  };
+
+
+
+  // Redirect to sign-in if user is not authenticated and not in onboarding
   useEffect(() => {
-    if (!loading && !user) {
+    if (!loading && !user && !needsOnboarding) {
       router.push('/sign-in');
     }
-  }, [user, loading, router]);
+  }, [user, loading, needsOnboarding, router]);
 
-  // Show loading spinner while checking authentication
-  if (loading) {
+  // Show loading spinner while checking authentication or during hydration
+  if (!isClient || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -41,28 +56,34 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     );
   }
 
+  // Onboarding is now handled globally in AuthProvider
+
   // Don't render layout if user is not authenticated
   if (!user) {
     return null;
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <Sidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
+    <>
+      <div className="flex h-screen bg-gray-50">
+        {/* Sidebar */}
+        <Sidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
-        {/* Header */}
-        <Header onMenuClick={toggleSidebar} />
+        {/* Main content area */}
+        <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
+          {/* Header */}
+          <Header onMenuClick={toggleSidebar} />
 
-        {/* Main content */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
-          <div className="container mx-auto px-4 py-6 lg:px-6">
-            {children}
-          </div>
-        </main>
+          {/* Main content */}
+          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
+            <div className="container mx-auto px-4 py-6 lg:px-6">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+
+
+    </>
   );
 };

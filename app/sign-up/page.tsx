@@ -9,21 +9,6 @@ export default function SignUp() {
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [validationError, setValidationError] = useState<string>("");
 
-  // Team modal state
-  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
-  const [teamName, setTeamName] = useState("");
-  const [teamMode, setTeamMode] = useState<'join' | 'create'>('join');
-  const [teams, setTeams] = useState<string[]>([]);
-
-  // Load existing teams when modal opens
-  const fetchTeams = async () => {
-    try {
-      const res = await fetch('/api/teams');
-      const data = await res.json();
-      if (res.ok && data?.teams) setTeams(data.teams);
-    } catch {}
-  };
-
   const [
     createUserWithEmailAndPassword,
     user,
@@ -53,7 +38,6 @@ export default function SignUp() {
     }
   };
 
-  // First submit triggers the team modal
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setValidationError("");
@@ -68,39 +52,22 @@ export default function SignUp() {
       return;
     }
 
-    // Open team modal before creating account
-    setIsTeamModalOpen(true);
-    fetchTeams();
-  };
-
-  // Create account after team provided
-  const handleCreateAccount = async () => {
-    if (!teamName.trim()) {
-      setValidationError("Please enter a team name");
-      return;
-    }
-
     try {
-      // Save chosen team temporarily so AuthContext can pick it during profile creation
-      sessionStorage.setItem('pendingTeamId', teamName.trim());
-
       const res = await createUserWithEmailAndPassword(email, password);
       if (res?.user?.email) {
         sessionStorage.setItem('user', res.user.email);
       }
 
       // Cleanup
-      setTeamName("");
       setEmail("");
       setPassword("");
       setConfirmPassword("");
 
-      // Redirect to main app after successful signup
+      // Redirect to main app after successful signup - onboarding will handle company setup
       window.location.href = "/";
     } catch (error: any) {
       console.error("Error creating user:", error);
       setValidationError(getSignUpErrorMessage(error));
-      setIsTeamModalOpen(false);
     }
   };
 
@@ -222,82 +189,6 @@ export default function SignUp() {
             Already have an account? <a href="/sign-in" className="text-blue-600 hover:text-blue-700 font-medium hover:underline transition-colors">Sign in</a>
           </p>
         </div>
-
-        {/* Team selection modal */}
-        {isTeamModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 p-4">
-            <div className="bg-white w-full max-w-md rounded-xl shadow-2xl p-6 border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Set up your team</h3>
-              <p className="text-sm text-gray-600 mt-1">Join an existing team or create a new one.</p>
-
-              <div className="mt-4 flex space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setTeamMode('join')}
-                  className={`px-3 py-2 text-sm rounded-md border ${teamMode === 'join' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'}`}
-                >
-                  Join existing
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTeamMode('create')}
-                  className={`px-3 py-2 text-sm rounded-md border ${teamMode === 'create' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'}`}
-                >
-                  Create new
-                </button>
-              </div>
-
-              {teamMode === 'join' ? (
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Select a team</label>
-                  <select
-                    value={teamName}
-                    onChange={(e) => setTeamName(e.target.value)}
-                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                  >
-                    <option value="">-- Choose team --</option>
-                    {teams.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                  {teams.length === 0 && (
-                    <p className="text-xs text-gray-500 mt-2">No teams yet. Switch to "Create new".</p>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-4">
-                  <label htmlFor="teamName" className="block text-sm font-medium text-gray-700 mb-2">Team name</label>
-                  <input
-                    id="teamName"
-                    type="text"
-                    value={teamName}
-                    onChange={(e) => setTeamName(e.target.value)}
-                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500"
-                    placeholder="e.g., Marketing, Sales, Support"
-                    autoFocus
-                  />
-                </div>
-              )}
-
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
-                  onClick={() => { setIsTeamModalOpen(false); setTeamName(""); }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                  onClick={handleCreateAccount}
-                >
-                  Continue
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

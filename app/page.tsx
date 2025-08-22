@@ -9,7 +9,7 @@ import Papa from "papaparse";
 
 
 export default function Home() {
-  const { user, loading } = useAuth();
+  const { user, loading, needsOnboarding, firebaseUser } = useAuth();
   const router = useRouter();
 
   const [leads, setLeads] = useState<any[]>([]);
@@ -205,12 +205,12 @@ export default function Home() {
 
 
 
-  // Redirect if not logged in
+  // Redirect if not logged in (but allow onboarding)
   useEffect(() => {
-    if (!loading && !user) {
+    if (!loading && !user && !needsOnboarding) {
       router.push('/sign-in');
     }
-  }, [user, loading, router]);
+  }, [user, loading, needsOnboarding, router]);
   
   // Custom upload button handler
   const handleUploadClick = () => {
@@ -228,8 +228,8 @@ export default function Home() {
     );
   }
 
-  // Show sign-in prompt if not authenticated
-  if (!user) {
+  // Show sign-in prompt if not authenticated (unless onboarding is needed)
+  if (!user && !needsOnboarding) {
     return null; // Will redirect to sign-in
   }
 
