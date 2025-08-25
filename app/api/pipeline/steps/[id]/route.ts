@@ -156,6 +156,51 @@ export async function DELETE(
     if (bulkOps.length > 0) {
       await stepsCollection.bulkWrite(bulkOps);
     }
+
+    // Handle any leads that might be associated with this step
+    // Since the current system uses simple stage names, we'll check if any leads
+    // have a stage that matches the deleted step's title
+    const leadsCollection = db.collection("leads");
+    const deletedStepTitle = (await stepsCollection.findOne({ 
+      id: stepId, 
+      organizationId 
+    }))?.title;
+
+    if (deletedStepTitle) {
+      console.log(`Checking for leads in step "${deletedStepTitle}"`);
+      
+      // Find the first remaining step to move leads to
+      const firstRemainingStep = remainingSteps[0];
+      
+      if (firstRemainingStep) {
+        // Count leads in the deleted step
+        const leadsInDeletedStep = await leadsCollection.countDocuments({ 
+          stage: deletedStepTitle,
+          uploadedBy: { $exists: true } // Ensure we only update leads, not other documents
+        });
+        
+        console.log(`Found ${leadsInDeletedStep} leads in step "${deletedStepTitle}"`);
+        
+        if (leadsInDeletedStep > 0) {
+          // Update any leads that have the deleted step's title as their stage
+          const leadsUpdateResult = await leadsCollection.updateMany(
+            { 
+              stage: deletedStepTitle,
+              uploadedBy: { $exists: true } // Ensure we only update leads, not other documents
+            },
+            { 
+              $set: { 
+                stage: firstRemainingStep.title,
+                stageUpdatedAt: new Date().toISOString(),
+                stageUpdatedBy: 'system' // Mark as system update
+              }
+            }
+          );
+
+          console.log(`✅ Moved ${leadsUpdateResult.modifiedCount} leads from deleted step "${deletedStepTitle}" to "${firstRemainingStep.title}"`);
+        }
+      }
+    }
     
     return NextResponse.json({
       success: true,

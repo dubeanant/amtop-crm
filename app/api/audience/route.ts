@@ -69,18 +69,7 @@ export async function POST(req: NextRequest) {
       return hasValidData;
     });
     
-    // Add user info, timestamp, and default stage to each audience member
-    const audienceWithUserInfo: AudienceWithUserInfo[] = validAudience.map((audienceMember: Audience) => ({
-      ...audienceMember,
-      uploadedBy: userEmail,
-      uploadedAt: new Date().toISOString(),
-      stage: 'New', // Default stage for new audience members
-      stageUpdatedAt: new Date().toISOString(),
-      stageUpdatedBy: userEmail,
-      tag: audienceMember.tag || 'Untagged' // Add tag field
-    }));
-
-    if (audienceWithUserInfo.length === 0) {
+    if (validAudience.length === 0) {
       return NextResponse.json({ 
         success: false, 
         error: "No valid audience members found in the data" 
@@ -91,6 +80,38 @@ export async function POST(req: NextRequest) {
     await client.connect();
     
     const db = client.db(dbName);
+
+    // Get organization ID for the user
+    const usersCollection = db.collection("users");
+    const user = await usersCollection.findOne({ email: userEmail });
+    const organizationId = user?.organizationId;
+
+    // Get the first pipeline step to assign as default stage
+    let defaultStage = 'New'; // Fallback default
+    try {
+      const stepsCollection = db.collection("pipeline_steps");
+      const firstStep = await stepsCollection.findOne(
+        { organizationId: organizationId, isActive: true },
+        { sort: { order: 1 } }
+      );
+      if (firstStep) {
+        defaultStage = firstStep.title;
+      }
+    } catch (error) {
+      console.warn('Could not fetch first pipeline step, using default stage:', error);
+    }
+
+    // Add user info, timestamp, and default stage to each audience member
+    const audienceWithUserInfo: AudienceWithUserInfo[] = validAudience.map((audienceMember: Audience) => ({
+      ...audienceMember,
+      uploadedBy: userEmail,
+      uploadedAt: new Date().toISOString(),
+      stage: defaultStage, // Use first pipeline step as default stage
+      stageUpdatedAt: new Date().toISOString(),
+      stageUpdatedBy: userEmail,
+      tag: audienceMember.tag || 'Untagged' // Add tag field
+    }));
+
     const collection = db.collection("leads");
     
     const result = await collection.insertMany(audienceWithUserInfo);

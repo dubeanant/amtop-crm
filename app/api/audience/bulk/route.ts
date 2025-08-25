@@ -69,6 +69,21 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
+    // Get the first pipeline step to assign as default stage
+    let defaultStage = 'New'; // Fallback default
+    try {
+      const stepsCollection = db.collection("pipeline_steps");
+      const firstStep = await stepsCollection.findOne(
+        { organizationId: organizationId, isActive: true },
+        { sort: { order: 1 } }
+      );
+      if (firstStep) {
+        defaultStage = firstStep.title;
+      }
+    } catch (error) {
+      console.warn('Could not fetch first pipeline step, using default stage:', error);
+    }
+
     // Check if tag exists, if not create it
     const existingTag = await tagsCollection.findOne({ 
       name: tag, 
@@ -91,9 +106,10 @@ export async function POST(req: NextRequest) {
       Name: row.Name || row.name || '',
       Email: row.Email || row.email || '',
       Bio: row.Bio || row.bio || row.Biography || row.biography || '',
+      notes: row.Notes || row.notes || '',
       uploadedBy: userEmail,
       uploadedAt: new Date().toISOString(),
-      stage: 'New', // Default stage
+      stage: defaultStage, // Use first pipeline step as default stage
       stageUpdatedAt: new Date().toISOString(),
       stageUpdatedBy: userEmail,
       uploadName: name,

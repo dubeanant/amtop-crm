@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Layout } from '../components/layout/Layout';
 import { RoleGuard } from '../components/ui/RoleGuard';
+import { NotesDropdown } from '../components/ui/NotesDropdown';
 
 interface Audience {
   _id: string;
@@ -16,6 +17,7 @@ interface Audience {
   bio?: string;
   biography?: string;
   Biography?: string;
+  notes?: string;
   uploadedBy: string;
   uploadedAt: string;
   stage: string;
@@ -42,7 +44,9 @@ export default function AudiencePage() {
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
+  const [success, setSuccess] = useState<string>('');
   const [updatingAudienceId, setUpdatingAudienceId] = useState<string | null>(null);
+  const [updatingNotesId, setUpdatingNotesId] = useState<string | null>(null);
   const [filterStage, setFilterStage] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -53,20 +57,23 @@ export default function AudiencePage() {
   const [newAudience, setNewAudience] = useState({
     name: '',
     email: '',
+    phone: '',
     bio: ''
   });
   const [uploadData, setUploadData] = useState({
     name: '',
     tag: '',
-    newTag: '',
-    useExistingTag: true,
     existingTags: [] as string[]
   });
+  const [availableTags, setAvailableTags] = useState<Array<{id: string, name: string, description: string}>>([]);
   const [showTagModal, setShowTagModal] = useState(false);
   const [newTagData, setNewTagData] = useState({
     name: '',
     description: ''
   });
+  const [selectedAudience, setSelectedAudience] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const fetchAudience = async () => {
     if (!user?.email) return;
@@ -119,6 +126,7 @@ export default function AudiencePage() {
       const data = await response.json();
       
       if (data.success) {
+        setAvailableTags(data.tags);
         setUploadData(prev => ({
           ...prev,
           existingTags: data.tags.map((tag: any) => tag.name)
@@ -167,8 +175,7 @@ export default function AudiencePage() {
         // Set the new tag as selected
         setUploadData(prev => ({
           ...prev,
-          tag: newTagData.name.trim(),
-          useExistingTag: true
+          tag: newTagData.name.trim()
         }));
         setNewTagData({ name: '', description: '' });
         setShowTagModal(false);
@@ -201,36 +208,43 @@ export default function AudiencePage() {
       // Read file on frontend
       const fileReader = new FileReader();
       fileReader.onload = async (e) => {
-        try {
-          const csvContent = e.target?.result as string;
-          const parsedData = parseCSV(csvContent);
-          
-          // Validate data
-          const validationResult = validateAudienceData(parsedData);
-          if (!validationResult.isValid) {
-            setError(validationResult.error);
-            setUploadingFile(false);
-            return;
-          }
+                 try {
+           const csvContent = e.target?.result as string;
+           const parsedData = parseCSV(csvContent);
+           
+           // Normalize the data to handle bio field variations
+           const normalizedData = normalizeAudienceData(parsedData);
+           
+           // Debug: Log the normalized data to see bio field mapping
+           console.log('Original parsed data:', parsedData);
+           console.log('Normalized data with bio fields:', normalizedData);
+           
+           // Validate data
+           const validationResult = validateAudienceData(normalizedData);
+               if (!validationResult.isValid) {
+      setError(validationResult.error || 'Validation failed');
+      setUploadingFile(false);
+      return;
+    }
 
-          // Check entry limit
-          if (parsedData.length > 100000) {
-            setError('Maximum 100,000 entries allowed per upload. Please contact us for larger uploads.');
-            setUploadingFile(false);
-            return;
-          }
+           // Check entry limit
+           if (normalizedData.length > 100000) {
+             setError('Maximum 100,000 entries allowed per upload. Please contact us for larger uploads.');
+             setUploadingFile(false);
+             return;
+           }
 
-          // Upload to database
-          const response = await fetch('/api/audience/bulk', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              audience: parsedData,
-              name: uploadData.name.trim(),
-              tag: uploadData.tag.trim(),
-              userEmail: user?.email
-            }),
-          });
+           // Upload to database
+           const response = await fetch('/api/audience/bulk', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({
+               audience: normalizedData,
+               name: uploadData.name.trim(),
+               tag: uploadData.tag.trim(),
+               userEmail: user?.email
+             }),
+           });
 
           if (response.ok) {
             const data = await response.json();
@@ -240,8 +254,6 @@ export default function AudiencePage() {
             setUploadData({
               name: '',
               tag: '',
-              newTag: '',
-              useExistingTag: true,
               existingTags: []
             });
             setUploadProgress(0);
@@ -273,16 +285,67 @@ export default function AudiencePage() {
 
     for (let i = 1; i < lines.length; i++) {
       if (lines[i].trim()) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+        // Better CSV parsing that handles quoted fields properly
+        const values: string[] = [];
+        let currentValue = '';
+        let inQuotes = false;
+        const line = lines[i];
+        
+        for (let j = 0; j < line.length; j++) {
+          const char = line[j];
+          
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            values.push(currentValue.trim());
+            currentValue = '';
+          } else {
+            currentValue += char;
+          }
+        }
+        
+        // Add the last value
+        values.push(currentValue.trim());
+        
         const row: any = {};
         headers.forEach((header, index) => {
-          row[header] = values[index] || '';
+          // Remove quotes from the final value
+          row[header] = (values[index] || '').replace(/^"|"$/g, '');
         });
         data.push(row);
       }
     }
 
     return data;
+  };
+
+  const normalizeAudienceData = (data: any[]) => {
+    // Define bio field variations
+    const bioFields = [
+      'Bio', 'bio', 'Biography', 'biography', 'Description', 'description', 
+      'Notes', 'notes', 'Comment', 'comment', 'About', 'about', 'Summary', 'summary'
+    ];
+
+    return data.map(row => {
+      const normalizedRow: any = { ...row };
+      
+      // Find and map bio field
+      let bioContent = '';
+      for (const bioField of bioFields) {
+        if (row[bioField] && row[bioField].trim()) {
+          bioContent = row[bioField].trim();
+          break;
+        }
+      }
+      
+      // Add Bio field if we found bio content
+      if (bioContent) {
+        normalizedRow.Bio = bioContent;
+        normalizedRow.Description = bioContent; // Also add as Description for consistency
+      }
+      
+      return normalizedRow;
+    });
   };
 
   const validateAudienceData = (data: any[]) => {
@@ -411,6 +474,42 @@ export default function AudiencePage() {
     }
   };
 
+  const saveNotes = async (audienceId: string, notes: string) => {
+    if (!hasPermission('audience', 'update')) {
+      setError('You do not have permission to update audience notes');
+      return;
+    }
+
+    try {
+      setUpdatingNotesId(audienceId);
+      setError('');
+
+      const response = await fetch(`/api/audience/${audienceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          notes: notes,
+          notesUpdatedAt: new Date().toISOString(),
+          notesUpdatedBy: user?.email
+        }),
+      });
+
+      if (response.ok) {
+        await fetchAudience();
+        setSuccess('Notes saved successfully');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to save notes');
+      }
+    } catch (error) {
+      console.error('Error saving notes:', error);
+      setError('Failed to save notes');
+    } finally {
+      setUpdatingNotesId(null);
+    }
+  };
+
   const deleteAudience = async (audienceId: string) => {
     if (!hasPermission('audience', 'delete')) {
       setError('You do not have permission to delete audience members');
@@ -429,6 +528,12 @@ export default function AudiencePage() {
 
       if (response.ok) {
         await fetchAudience();
+        // Remove from selected set if it was selected
+        setSelectedAudience(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(audienceId);
+          return newSet;
+        });
       } else {
         const data = await response.json();
         setError(data.error || 'Failed to delete audience member');
@@ -436,6 +541,81 @@ export default function AudiencePage() {
     } catch (error) {
       console.error('Error deleting audience member:', error);
       setError('Failed to delete audience member');
+    }
+  };
+
+  const handleSelectAudience = (audienceId: string) => {
+    setSelectedAudience(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(audienceId)) {
+        newSet.delete(audienceId);
+      } else {
+        newSet.add(audienceId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedAudience(new Set());
+      setSelectAll(false);
+    } else {
+      setSelectedAudience(new Set(filteredAudience.map(audience => audience._id)));
+      setSelectAll(true);
+    }
+  };
+
+  const bulkDeleteAudience = async () => {
+    if (!hasPermission('audience', 'delete')) {
+      setError('You do not have permission to delete audience members');
+      return;
+    }
+
+    if (selectedAudience.size === 0) {
+      setError('Please select at least one audience member to delete');
+      return;
+    }
+
+    const confirmMessage = selectedAudience.size === 1 
+      ? 'Are you sure you want to delete this audience member?' 
+      : `Are you sure you want to delete ${selectedAudience.size} audience members? This action cannot be undone.`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      setBulkDeleting(true);
+      setError('');
+
+      const response = await fetch('/api/audience/bulk-delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audienceIds: Array.from(selectedAudience),
+          userEmail: user?.email
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        await fetchAudience();
+        setSelectedAudience(new Set());
+        setSelectAll(false);
+        setSuccess(data.message || `Successfully deleted ${selectedAudience.size} audience member(s)`);
+        setTimeout(() => setSuccess(''), 5000);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to delete audience members');
+      setSuccess('');
+      }
+    } catch (error) {
+      console.error('Error bulk deleting audience members:', error);
+      setError('Failed to delete audience members');
+      setSuccess('');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -465,6 +645,7 @@ export default function AudiencePage() {
             Name: newAudience.name.trim(),
             Email: newAudience.email.trim(),
             Bio: newAudience.bio.trim(),
+            Description: newAudience.bio.trim(), // Add Description field as well
             tag: uploadData.tag.trim()
           }],
           userEmail: user?.email
@@ -473,12 +654,10 @@ export default function AudiencePage() {
 
       if (response.ok) {
         await fetchAudience();
-        setNewAudience({ name: '', email: '', bio: '' });
+        setNewAudience({ name: '', email: '', phone: '', bio: '' });
         setUploadData({
           name: '',
           tag: '',
-          newTag: '',
-          useExistingTag: true,
           existingTags: uploadData.existingTags
         });
         setShowUploadModal(false);
@@ -505,7 +684,23 @@ export default function AudiencePage() {
   };
 
   const getAudienceDisplayBio = (audience: Audience) => {
-    return audience.Bio || audience.bio || audience.biography || audience.Biography || 'No bio';
+    // Check for various bio field naming variations
+    const bioFields = [
+      'Bio', 'bio', 'Biography', 'biography', 'Description', 'description', 
+      'Comment', 'comment', 'About', 'about', 'Summary', 'summary'
+    ];
+    
+    for (const field of bioFields) {
+      if (audience[field] && audience[field].trim()) {
+        return audience[field];
+      }
+    }
+    
+    return 'No bio';
+  };
+
+  const getAudienceDisplayNotes = (audience: Audience) => {
+    return audience.notes || '';
   };
 
   const getStageBadgeColor = (stage: string) => {
@@ -532,6 +727,12 @@ export default function AudiencePage() {
       fetchAudience();
     }
   }, [user]);
+
+  // Reset selection when filters change
+  useEffect(() => {
+    setSelectedAudience(new Set());
+    setSelectAll(false);
+  }, [filterStage, searchTerm]);
 
   if (loading) {
     return (
@@ -599,19 +800,33 @@ export default function AudiencePage() {
             </div>
           </div>
 
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex">
-                <svg className="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div className="ml-3">
-                  <p className="text-sm text-red-600">{error}</p>
-                </div>
-              </div>
-            </div>
-          )}
+                     {/* Error Message */}
+           {error && (
+             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+               <div className="flex">
+                 <svg className="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                 </svg>
+                 <div className="ml-3">
+                   <p className="text-sm text-red-600">{error}</p>
+                 </div>
+               </div>
+             </div>
+           )}
+
+           {/* Success Message */}
+           {success && (
+             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+               <div className="flex">
+                 <svg className="h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                 </svg>
+                 <div className="ml-3">
+                   <p className="text-sm text-green-600">{success}</p>
+                 </div>
+               </div>
+             </div>
+           )}
 
           {/* Add Audience Form */}
           {showAddForm && (
@@ -701,8 +916,6 @@ export default function AudiencePage() {
                       setUploadData({
                         name: '',
                         tag: '',
-                        newTag: '',
-                        useExistingTag: true,
                         existingTags: []
                       });
                       setError('');
@@ -799,55 +1012,26 @@ export default function AudiencePage() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Tag *
                       </label>
-                      <div className="space-y-3">
-                        <div className="flex items-center space-x-3">
-                          <input
-                            type="radio"
-                            id="existing-tag"
-                            checked={uploadData.useExistingTag}
-                            onChange={() => setUploadData({ ...uploadData, useExistingTag: true })}
-                            className="text-blue-600 focus:ring-blue-500"
-                          />
-                          <label htmlFor="existing-tag" className="text-sm text-gray-700">
-                            Use existing tag
-                          </label>
-                        </div>
-                        {uploadData.useExistingTag && (
-                          <select
-                            value={uploadData.tag}
-                            onChange={(e) => setUploadData({ ...uploadData, tag: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="">Select a tag</option>
-                            {uploadData.existingTags.map((tag) => (
-                              <option key={tag} value={tag}>
-                                {tag}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-
-                        <div className="flex items-center space-x-3">
-                          <input
-                            type="radio"
-                            id="new-tag"
-                            checked={!uploadData.useExistingTag}
-                            onChange={() => setUploadData({ ...uploadData, useExistingTag: false })}
-                            className="text-blue-600 focus:ring-blue-500"
-                          />
-                          <label htmlFor="new-tag" className="text-sm text-gray-700">
-                            Create new tag
-                          </label>
-                        </div>
-                        {!uploadData.useExistingTag && (
-                          <input
-                            type="text"
-                            value={uploadData.newTag}
-                            onChange={(e) => setUploadData({ ...uploadData, newTag: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Enter new tag name"
-                          />
-                        )}
+                      <div className="space-y-2">
+                        <select
+                          value={uploadData.tag}
+                          onChange={(e) => setUploadData({ ...uploadData, tag: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Select a tag</option>
+                          {availableTags.map((tag) => (
+                            <option key={tag.id} value={tag.name} title={tag.description}>
+                              {tag.name} - {tag.description}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setShowTagModal(true)}
+                          className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                        >
+                          Create New Tag
+                        </button>
                       </div>
                     </div>
 
@@ -876,8 +1060,6 @@ export default function AudiencePage() {
                           setUploadData({
                             name: '',
                             tag: '',
-                            newTag: '',
-                            useExistingTag: true,
                             existingTags: []
                           });
                           setError('');
@@ -938,9 +1120,9 @@ export default function AudiencePage() {
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           >
                             <option value="">Select a tag</option>
-                            {uploadData.existingTags.map((tag) => (
-                              <option key={tag} value={tag}>
-                                {tag}
+                            {availableTags.map((tag) => (
+                              <option key={tag.id} value={tag.name} title={tag.description}>
+                                {tag.name} - {tag.description}
                               </option>
                             ))}
                           </select>
@@ -970,12 +1152,10 @@ export default function AudiencePage() {
                       <button
                         onClick={() => {
                           setShowUploadModal(false);
-                          setNewAudience({ name: '', email: '', bio: '' });
+                          setNewAudience({ name: '', email: '', phone: '', bio: '' });
                           setUploadData({
                             name: '',
                             tag: '',
-                            newTag: '',
-                            useExistingTag: true,
                             existingTags: []
                           });
                           setError('');
@@ -1001,7 +1181,28 @@ export default function AudiencePage() {
           {/* Audience Table */}
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Audience</h2>
+              <div className="flex items-center space-x-4">
+                <h2 className="text-lg font-semibold text-gray-900">Audience</h2>
+                {selectedAudience.size > 0 && (
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-600">
+                      {selectedAudience.size} selected
+                    </span>
+                    <RoleGuard resource="audience" action="delete">
+                      <button
+                        onClick={bulkDeleteAudience}
+                        disabled={bulkDeleting}
+                        className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span>{bulkDeleting ? 'Deleting...' : 'Delete Selected'}</span>
+                      </button>
+                    </RoleGuard>
+                  </div>
+                )}
+              </div>
               <RoleGuard resource="audience" action="create">
                 <button
                   onClick={() => setShowUploadModal(true)}
@@ -1019,16 +1220,23 @@ export default function AudiencePage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={selectAll}
+                          onChange={handleSelectAll}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                      </div>
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Audience Info
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Email
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Stage
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Added
+                      Notes
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Actions
@@ -1057,6 +1265,14 @@ export default function AudiencePage() {
                     filteredAudience.map((audienceMember) => (
                       <tr key={audienceMember._id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            checked={selectedAudience.has(audienceMember._id)}
+                            onChange={() => handleSelectAudience(audienceMember._id)}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <div>
                             <div className="text-sm font-medium text-gray-900">
                               {getAudienceDisplayName(audienceMember)}
@@ -1066,57 +1282,70 @@ export default function AudiencePage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                                                                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
                             {getAudienceDisplayEmail(audienceMember)}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStageBadgeColor(audienceMember.stage)}`}>
-                            {audienceMember.stage.charAt(0).toUpperCase() + audienceMember.stage.slice(1)}
-                          </span>
-                          {audienceMember.stageUpdatedAt && (
-                            <div className="text-xs text-gray-400 mt-1">
-                              Updated: {new Date(audienceMember.stageUpdatedAt).toLocaleDateString()}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(audienceMember.uploadedAt).toLocaleDateString()}
+                          <NotesDropdown
+                            audienceId={audienceMember._id}
+                            currentNotes={getAudienceDisplayNotes(audienceMember)}
+                            onSaveNotes={saveNotes}
+                            isUpdating={updatingNotesId === audienceMember._id}
+                          />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex items-center space-x-2">
-                            {/* Stage Change Buttons */}
-                            <RoleGuard resource="pipeline" action="update">
-                              <div className="flex flex-wrap gap-1">
-                                {pipelineSteps
-                                  .filter(step => step.title !== audienceMember.stage)
-                                  .map((step) => (
-                                    <button
-                                      key={step.id}
-                                      onClick={() => moveAudienceToStage(audienceMember._id, step.title)}
-                                      disabled={updatingAudienceId === audienceMember._id}
-                                      className={`text-xs px-2 py-1 rounded hover:opacity-80 disabled:opacity-50 ${step.bgColor} ${step.color}`}
-                                      title={`Move to ${step.title}`}
-                                    >
-                                      {updatingAudienceId === audienceMember._id ? '...' : step.title}
-                                    </button>
-                                  ))}
-                              </div>
-                            </RoleGuard>
-                            
-                            {/* Delete Button */}
-                            <RoleGuard resource="audience" action="delete">
-                              <button
-                                onClick={() => deleteAudience(audienceMember._id)}
-                                className="text-red-600 hover:text-red-900 hover:bg-red-50 px-2 py-1 rounded text-xs"
-                                title="Delete audience member"
-                              >
-                                Delete
-                              </button>
-                            </RoleGuard>
-                          </div>
-                        </td>
+                           <div className="flex items-center space-x-2">
+                             {/* Actions Dropdown */}
+                             <div className="relative">
+                               <select
+                                 value=""
+                                 onChange={(e) => {
+                                   const action = e.target.value;
+                                   if (action === 'delete') {
+                                     deleteAudience(audienceMember._id);
+                                   } else if (action) {
+                                     moveAudienceToStage(audienceMember._id, action);
+                                   }
+                                   e.target.value = ''; // Reset selection
+                                 }}
+                                 disabled={updatingAudienceId === audienceMember._id}
+                                 className="text-xs px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                               >
+                                 <option value="">Actions</option>
+                                 
+                                 {/* Pipeline Steps */}
+                                 {pipelineSteps
+                                   .filter(step => step.title !== audienceMember.stage)
+                                   .map((step) => (
+                                     <option key={step.id} value={step.title}>
+                                       Move to {step.title}
+                                     </option>
+                                   ))}
+                                 
+                                 {/* Additional Actions */}
+                                 <option value="Rejected">Move to Rejected</option>
+                                 <option value="Unqualified">Move to Unqualified</option>
+                                 <option value="Can't Reach">Move to Can't Reach</option>
+                                 
+                                 {/* Delete Action */}
+                                 <RoleGuard resource="audience" action="delete">
+                                   <option value="delete" className="text-red-600">
+                                     Delete
+                                   </option>
+                                 </RoleGuard>
+                               </select>
+                               
+                               {/* Loading indicator */}
+                               {updatingAudienceId === audienceMember._id && (
+                                 <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded">
+                                   <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                                 </div>
+                               )}
+                             </div>
+                           </div>
+                         </td>
                       </tr>
                     ))
                   )}

@@ -31,6 +31,7 @@ export interface AuthContextType {
   updateUserRole: (userId: string, role: UserRole) => Promise<void>;
   hasPermission: (resource: string, action: string) => boolean;
   completeOnboarding: (companyName: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 // Role-based permissions configuration
@@ -39,6 +40,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     { resource: 'audience', actions: ['create', 'read', 'update', 'delete', 'manage_all'] },
     { resource: 'users', actions: ['create', 'read', 'update', 'delete', 'manage_roles'] },
     { resource: 'pipeline', actions: ['create', 'read', 'update', 'delete', 'manage_stages'] },
+    { resource: 'campaign', actions: ['create', 'read', 'update', 'delete', 'manage_all'] },
     { resource: 'analytics', actions: ['read', 'export'] },
     { resource: 'settings', actions: ['read', 'update'] },
   ],
@@ -46,11 +48,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     { resource: 'audience', actions: ['create', 'read', 'update', 'delete', 'view_own'] },
     { resource: 'users', actions: ['read', 'view_team'] },
     { resource: 'pipeline', actions: ['create', 'read', 'update', 'delete'] },
+    { resource: 'campaign', actions: ['create', 'read', 'update', 'delete'] },
     { resource: 'analytics', actions: ['read_own'] },
   ],
   viewer: [
     { resource: 'audience', actions: ['read', 'view_own'] },
     { resource: 'pipeline', actions: ['read'] },
+    { resource: 'campaign', actions: ['read'] },
     { resource: 'analytics', actions: ['read_own'] },
   ],
 };

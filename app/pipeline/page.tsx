@@ -40,6 +40,20 @@ interface NewTagForm {
   description: string;
 }
 
+interface Lead {
+  _id: string;
+  Name?: string;
+  name?: string;
+  Email?: string;
+  email?: string;
+  Bio?: string;
+  bio?: string;
+  stage: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  [key: string]: any;
+}
+
 interface StepTemplate {
   id: string;
   title: string;
@@ -203,6 +217,7 @@ export default function PipelinePage() {
   const [steps, setSteps] = useState<PipelineStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
+  const [success, setSuccess] = useState<string>('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showBulkForm, setShowBulkForm] = useState(false);
   const [editingStep, setEditingStep] = useState<PipelineStep | null>(null);
@@ -214,7 +229,7 @@ export default function PipelinePage() {
     template: ''
   });
   const [showAdvancedTemplates, setShowAdvancedTemplates] = useState(false);
-  const [activeTab, setActiveTab] = useState<'steps' | 'tags'>('steps');
+  const [activeTab, setActiveTab] = useState<'steps' | 'tags' | 'funnel'>('steps');
   const [tags, setTags] = useState<Tag[]>([]);
   const [showAddTagForm, setShowAddTagForm] = useState(false);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
@@ -229,6 +244,10 @@ export default function PipelinePage() {
       { title: '', description: '', color: 'yellow', template: '' }
     ]
   });
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [selectedStep, setSelectedStep] = useState<string | null>(null);
+  const [loadingLeads, setLoadingLeads] = useState(false);
+  const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
 
   const fetchSteps = async () => {
     console.log('🔍 fetchSteps called with user:', user);
@@ -332,11 +351,62 @@ export default function PipelinePage() {
     }
   };
 
+  const fetchLeads = async () => {
+    if (!user?.email) return;
+
+    try {
+      setLoadingLeads(true);
+      const response = await fetch(`/api/audience?userEmail=${encodeURIComponent(user.email)}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        setLeads(data);
+      } else {
+        setError(data.error || 'Failed to fetch leads');
+      }
+    } catch (error) {
+      console.error('Error fetching leads:', error);
+      setError('Failed to fetch leads');
+    } finally {
+      setLoadingLeads(false);
+    }
+  };
+
+  const getLeadsByStage = (stageTitle: string) => {
+    return leads.filter(lead => lead.stage === stageTitle);
+  };
+
+  const getLeadDisplayName = (lead: Lead) => {
+    return lead.Name || lead.name || 'Unknown';
+  };
+
+  const getLeadDisplayEmail = (lead: Lead) => {
+    return lead.Email || lead.email || 'No email';
+  };
+
+  const getLeadDisplayBio = (lead: Lead) => {
+    const bioFields = [
+      'Bio', 'bio', 'Biography', 'biography', 'Description', 'description', 
+      'Notes', 'notes', 'Comment', 'comment', 'About', 'about', 'Summary', 'summary'
+    ];
+    
+    for (const field of bioFields) {
+      if (lead[field] && lead[field].trim()) {
+        return lead[field];
+      }
+    }
+    
+    return 'No bio';
+  };
+
   const saveSteps = (updatedSteps: PipelineStep[]) => {
     setSteps(updatedSteps);
   };
 
   const addStep = async () => {
+    setError('');
+    setSuccess('');
+    
     if (!newStep.title.trim()) {
       setError('Step title is required');
       return;
@@ -382,6 +452,9 @@ export default function PipelinePage() {
   };
 
   const addBulkSteps = async () => {
+    setError('');
+    setSuccess('');
+    
     const validSteps = bulkSteps.steps.filter(step => step.title.trim());
     
     if (validSteps.length === 0) {
@@ -496,6 +569,9 @@ export default function PipelinePage() {
   };
 
   const updateStep = async (stepId: string, updates: Partial<PipelineStep>) => {
+    setError('');
+    setSuccess('');
+    
     if (!user?.organizationId) {
       setError('Organization ID is required');
       return;
@@ -531,6 +607,9 @@ export default function PipelinePage() {
   };
 
   const deleteStep = async (stepId: string) => {
+    setError('');
+    setSuccess('');
+    
     if (steps.length <= 1) {
       setError('You must have at least one pipeline step');
       return;
@@ -540,8 +619,30 @@ export default function PipelinePage() {
       setError('Organization ID is required');
       return;
     }
+
+    // Find the step to be deleted for confirmation message
+    const stepToDelete = steps.find(step => step.id === stepId);
+    if (!stepToDelete) {
+      setError('Step not found');
+      return;
+    }
+
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${stepToDelete.title}"?\n\n` +
+      `This will:\n` +
+      `• Remove this step from your pipeline\n` +
+      `• Move any leads in this step to the first available step\n` +
+      `• Reorder the remaining steps\n\n` +
+      `This action cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
     
     try {
+      setLoading(true);
       const response = await fetch(`/api/pipeline/steps/${stepId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -555,12 +656,19 @@ export default function PipelinePage() {
       if (data.success) {
         // Refresh steps from server to get updated order
         await fetchSteps();
+        setError(''); // Clear any previous errors
+        setSuccess(`Pipeline step "${stepToDelete.title}" deleted successfully. Any leads in that step have been moved to the first available step.`);
+        
+        // Clear success message after 5 seconds
+        setTimeout(() => setSuccess(''), 5000);
       } else {
         setError(data.error || 'Failed to delete pipeline step');
       }
     } catch (error) {
       console.error('Error deleting step:', error);
       setError('Failed to delete pipeline step');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -727,12 +835,72 @@ export default function PipelinePage() {
     }
   };
 
+  const moveLeadToStage = async (leadId: string, newStage: string) => {
+    if (!user?.email) {
+      setError('User email is required');
+      return;
+    }
+
+    try {
+      setUpdatingLeadId(leadId);
+      setError('');
+
+      const response = await fetch(`/api/audience/${leadId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          stage: newStage,
+          stageUpdatedAt: new Date().toISOString(),
+          stageUpdatedBy: user.email
+        }),
+      });
+
+      if (response.ok) {
+        // Update the local state
+        setLeads(prevLeads => 
+          prevLeads.map(lead => 
+            lead._id === leadId 
+              ? { ...lead, stage: newStage }
+              : lead
+          )
+        );
+        setSuccess(`Lead moved to ${newStage} successfully`);
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to move lead');
+      }
+    } catch (error) {
+      console.error('Error moving lead:', error);
+      setError('Failed to move lead');
+    } finally {
+      setUpdatingLeadId(null);
+    }
+  };
+
+  const getNextStage = (currentStage: string) => {
+    const currentStepIndex = steps.findIndex(step => step.title === currentStage);
+    if (currentStepIndex >= 0 && currentStepIndex < steps.length - 1) {
+      return steps[currentStepIndex + 1].title;
+    }
+    return null;
+  };
+
+  const getPreviousStage = (currentStage: string) => {
+    const currentStepIndex = steps.findIndex(step => step.title === currentStage);
+    if (currentStepIndex > 0) {
+      return steps[currentStepIndex - 1].title;
+    }
+    return null;
+  };
+
   useEffect(() => {
     console.log('🔄 useEffect triggered with user:', user);
     if (user) {
       console.log('👤 User found, fetching data...');
       fetchSteps();
       fetchTags();
+      fetchLeads();
     } else {
       console.log('❌ No user found');
     }
@@ -765,53 +933,6 @@ export default function PipelinePage() {
         </div>
       }>
         <div className="space-y-6">
-          {/* Page Header */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Pipeline Configuration</h1>
-                <p className="text-gray-600 mt-1">
-                  Set up and customize your sales funnel steps and tags
-                </p>
-              </div>
-              <RoleGuard resource="pipeline" action="update">
-                <div className="flex space-x-3">
-                  {activeTab === 'steps' ? (
-                    <>
-                      <button
-                        onClick={() => setShowAddForm(true)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        <span>Add Step</span>
-                      </button>
-                      <button
-                        onClick={() => setShowBulkForm(true)}
-                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                        </svg>
-                        <span>Add Multiple</span>
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => setShowAddTagForm(true)}
-                      className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center space-x-2"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                      </svg>
-                      <span>Add Tag</span>
-                    </button>
-                  )}
-                </div>
-              </RoleGuard>
-            </div>
-          </div>
 
           {/* Tabs */}
           <div className="bg-white rounded-lg shadow-sm">
@@ -843,9 +964,24 @@ export default function PipelinePage() {
                     {tags.length}
                   </span>
                 </button>
+                <button
+                  onClick={() => setActiveTab('funnel')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'funnel'
+                      ? 'border-green-500 text-green-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Funnel View
+                  <span className="ml-2 bg-gray-100 text-gray-900 py-0.5 px-2.5 rounded-full text-xs">
+                    {leads.length}
+                  </span>
+                </button>
               </nav>
             </div>
           </div>
+
+          
 
           {/* Error Message */}
           {error && (
@@ -856,6 +992,20 @@ export default function PipelinePage() {
                 </svg>
                 <div className="ml-3">
                   <p className="text-sm text-red-600">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Success Message */}
+          {success && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex">
+                <svg className="h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <div className="ml-3">
+                  <p className="text-sm text-green-600">{success}</p>
                 </div>
               </div>
             </div>
@@ -972,6 +1122,7 @@ This helps AI understand your funnel better for automation and insights."
                     setShowAddForm(false);
                     setNewStep({ title: '', description: '', color: 'blue', template: '' });
                     setError('');
+                    setSuccess('');
                   }}
                   className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
                 >
@@ -1096,6 +1247,7 @@ This helps AI understand your funnel better for automation and insights."
                         ]
                       });
                       setError('');
+                      setSuccess('');
                     }}
                     className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
                   >
@@ -1168,7 +1320,20 @@ This helps AI understand your funnel better for automation and insights."
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900">Your Tags</h2>
-                <span className="text-sm text-gray-500">{tags.length} tag{tags.length !== 1 ? 's' : ''}</span>
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm text-gray-500">{tags.length} tag{tags.length !== 1 ? 's' : ''}</span>
+                  <RoleGuard resource="pipeline" action="update">
+                    <button
+                      onClick={() => setShowAddTagForm(true)}
+                      className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center space-x-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                      </svg>
+                      <span>Add Tag</span>
+                    </button>
+                  </RoleGuard>
+                </div>
               </div>
 
               {tags.length === 0 ? (
@@ -1271,7 +1436,31 @@ This helps AI understand your funnel better for automation and insights."
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Your Pipeline Steps</h2>
-              <span className="text-sm text-gray-500">{steps.length} step{steps.length !== 1 ? 's' : ''}</span>
+              <div className="flex items-center space-x-3">
+                <span className="text-sm text-gray-500">{steps.length} step{steps.length !== 1 ? 's' : ''}</span>
+                <RoleGuard resource="pipeline" action="update">
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setShowAddForm(true)}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span>Add Step</span>
+                    </button>
+                    <button
+                      onClick={() => setShowBulkForm(true)}
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                      <span>Add Multiple</span>
+                    </button>
+                  </div>
+                </RoleGuard>
+              </div>
             </div>
 
             {steps.length === 0 ? (
@@ -1393,28 +1582,217 @@ This helps AI understand your funnel better for automation and insights."
           </div>
           )}
 
-          {/* Instructions */}
-          {activeTab === 'steps' && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex">
-              <svg className="h-5 w-5 text-blue-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-blue-800">Pipeline Setup Tips</h3>
-                <div className="mt-2 text-sm text-blue-700">
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>Use "Add Step" for single steps or "Add Multiple" for bulk creation</li>
-                    <li>Drag and drop steps to reorder them</li>
-                    <li>Click the edit icon to modify step names and descriptions</li>
-                    <li>Choose different colors to visually distinguish your steps</li>
-                    <li>Your pipeline configuration is saved automatically</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-          )}
+          
+
+                                {/* Funnel View */}
+            {activeTab === 'funnel' && (
+              <div className="space-y-6">
+
+               {loadingLeads ? (
+                 <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+                   <p className="mt-4 text-gray-600">Loading leads...</p>
+                 </div>
+               ) : steps.length === 0 ? (
+                 <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+                   <div className="text-gray-400 mb-4">
+                     <svg className="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                     </svg>
+                   </div>
+                   <h3 className="text-lg font-medium text-gray-900 mb-2">No Pipeline Steps</h3>
+                   <p className="text-gray-600">Create pipeline steps first to view your funnel</p>
+                 </div>
+               ) : (
+                 <div className="bg-white rounded-lg shadow-sm">
+                   <div className="flex">
+                     {/* Vertical Tabs - Left Sidebar */}
+                     <div className="w-80 border-r border-gray-200 bg-gray-50">
+                       <div className="p-4 border-b border-gray-200">
+                         <h3 className="text-sm font-medium text-gray-900">Pipeline Steps</h3>
+                         <p className="text-xs text-gray-500 mt-1">Click to view leads</p>
+                       </div>
+                       <div className="overflow-y-auto max-h-96">
+                         {steps
+                           .sort((a, b) => a.order - b.order)
+                           .map((step, index) => {
+                             const colorConfig = colorOptions.find(c => c.value === step.color) || colorOptions[0];
+                             const stepLeads = getLeadsByStage(step.title);
+                             const isSelected = selectedStep === step.title;
+                             
+                             return (
+                               <button
+                                 key={step.id}
+                                 onClick={() => setSelectedStep(step.title)}
+                                 className={`w-full text-left p-4 border-b border-gray-200 hover:bg-gray-100 transition-colors ${
+                                   isSelected ? 'bg-white border-r-2 border-r-green-500' : ''
+                                 }`}
+                               >
+                                 <div className="flex items-center justify-between mb-2">
+                                   <div className="flex items-center space-x-2">
+                                     <span className={`rounded-full w-6 h-6 flex items-center justify-center text-sm font-medium ${
+                                       isSelected ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                                     }`}>
+                                       {index + 1}
+                                     </span>
+                                     <h4 className={`font-medium text-sm ${
+                                       isSelected ? 'text-green-700' : 'text-gray-900'
+                                     }`}>
+                                       {step.title}
+                                     </h4>
+                                   </div>
+                                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                     stepLeads.length > 0 
+                                       ? 'bg-green-100 text-green-700' 
+                                       : 'bg-gray-100 text-gray-500'
+                                   }`}>
+                                     {stepLeads.length}
+                                   </span>
+                                 </div>
+                                 <p className="text-xs text-gray-500 line-clamp-2">
+                                   {step.description || 'No description'}
+                                 </p>
+                               </button>
+                             );
+                           })}
+                       </div>
+                     </div>
+
+                     {/* Content Area - Right Side */}
+                     <div className="flex-1">
+                       {selectedStep ? (
+                         <div className="p-6">
+                           <div className="flex items-center justify-between mb-4">
+                             <div>
+                               <h3 className="text-lg font-semibold text-gray-900">
+                                 {selectedStep}
+                               </h3>
+                               <p className="text-sm text-gray-500">
+                                 {getLeadsByStage(selectedStep).length} leads in this stage
+                               </p>
+                             </div>
+                             <button
+                               onClick={() => setSelectedStep(null)}
+                               className="text-gray-400 hover:text-gray-600"
+                             >
+                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                               </svg>
+                             </button>
+                           </div>
+
+                           {getLeadsByStage(selectedStep).length > 0 ? (
+                             <div className="space-y-3 max-h-96 overflow-y-auto">
+                               {getLeadsByStage(selectedStep).map((lead) => {
+                                 const nextStage = getNextStage(lead.stage);
+                                 const previousStage = getPreviousStage(lead.stage);
+                                 const availableStages = steps
+                                   .filter(step => step.title !== lead.stage)
+                                   .map(step => step.title);
+                                 
+                                 return (
+                                   <div key={lead._id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-gray-300 transition-colors">
+                                     <div className="flex items-start justify-between">
+                                       <div className="flex-1 min-w-0">
+                                         <div className="flex items-center space-x-2 mb-1">
+                                           <p className="text-sm font-medium text-gray-900 truncate">
+                                             {getLeadDisplayName(lead)}
+                                           </p>
+                                           <span className="text-xs text-gray-400">•</span>
+                                           <p className="text-xs text-gray-500 truncate">
+                                             {getLeadDisplayEmail(lead)}
+                                           </p>
+                                         </div>
+                                         <p className="text-xs text-gray-600 line-clamp-2">
+                                           {getLeadDisplayBio(lead)}
+                                         </p>
+                                         <div className="flex items-center justify-between mt-2">
+                                           <div className="text-xs text-gray-400">
+                                             <span>Added {new Date(lead.uploadedAt).toLocaleDateString()}</span>
+                                             <span className="mx-1">•</span>
+                                             <span>by {lead.uploadedBy}</span>
+                                           </div>
+                                           
+                                           {/* Action Dropdown */}
+                                           <div className="flex items-center space-x-2">
+                                             {nextStage && (
+                                               <button
+                                                 onClick={() => moveLeadToStage(lead._id, nextStage)}
+                                                 disabled={updatingLeadId === lead._id}
+                                                 className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                 title={`Move to ${nextStage}`}
+                                               >
+                                                 {updatingLeadId === lead._id ? 'Moving...' : '→ Next'}
+                                               </button>
+                                             )}
+                                             
+                                             {previousStage && (
+                                               <button
+                                                 onClick={() => moveLeadToStage(lead._id, previousStage)}
+                                                 disabled={updatingLeadId === lead._id}
+                                                 className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                 title={`Move to ${previousStage}`}
+                                               >
+                                                 {updatingLeadId === lead._id ? 'Moving...' : '← Previous'}
+                                               </button>
+                                             )}
+                                             
+                                             <select
+                                               onChange={(e) => {
+                                                 if (e.target.value) {
+                                                   moveLeadToStage(lead._id, e.target.value);
+                                                 }
+                                               }}
+                                               disabled={updatingLeadId === lead._id}
+                                               className="px-2 py-1 text-xs border border-gray-300 rounded bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                               defaultValue=""
+                                             >
+                                               <option value="">Custom Stage</option>
+                                               {availableStages.map((stage) => (
+                                                 <option key={stage} value={stage}>
+                                                   {stage}
+                                                 </option>
+                                               ))}
+                                             </select>
+                                           </div>
+                                         </div>
+                                       </div>
+                                     </div>
+                                   </div>
+                                 );
+                               })}
+                             </div>
+                           ) : (
+                             <div className="text-center py-12">
+                               <div className="text-gray-400 mb-4">
+                                 <svg className="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                 </svg>
+                               </div>
+                               <h4 className="text-sm font-medium text-gray-900 mb-1">No leads in this stage</h4>
+                               <p className="text-sm text-gray-500">Leads will appear here when they reach this stage</p>
+                             </div>
+                           )}
+                         </div>
+                       ) : (
+                         <div className="flex items-center justify-center h-64">
+                           <div className="text-center">
+                             <div className="text-gray-400 mb-4">
+                               <svg className="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                               </svg>
+                             </div>
+                             <h4 className="text-sm font-medium text-gray-900 mb-1">Select a Pipeline Step</h4>
+                             <p className="text-sm text-gray-500">Choose a step from the left to view its leads</p>
+                           </div>
+                         </div>
+                       )}
+                     </div>
+                   </div>
+                 </div>
+               )}
+             </div>
+           )}
         </div>
       </RoleGuard>
     </Layout>

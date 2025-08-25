@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Layout } from '../components/layout/Layout';
 import { RoleGuard } from '../components/ui/RoleGuard';
 import { UserRole } from '../types/auth';
+import { AddTeamMemberModal } from '../components/teams/AddTeamMemberModal';
 
 interface User {
   uid: string;
@@ -26,6 +27,7 @@ export default function UsersPage() {
   const [refreshSuccess, setRefreshSuccess] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationSuccess, setMigrationSuccess] = useState(false);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
 
   const fetchUsers = async () => {
     if (!user?.email) return;
@@ -212,6 +214,17 @@ export default function UsersPage() {
                 <span className="text-sm text-gray-500">
                   {users.length} team member{users.length !== 1 ? 's' : ''}
                 </span>
+                <RoleGuard resource="users" action="create">
+                  <button
+                    onClick={() => setShowAddMemberModal(true)}
+                    className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    <span>Add Team Member</span>
+                  </button>
+                </RoleGuard>
                 {user?.role === 'admin' && (
                   <div className="flex space-x-2">
                     <button
@@ -404,6 +417,16 @@ export default function UsersPage() {
             </div>
           </div>
         </div>
+
+        {/* Add Team Member Modal */}
+        <AddTeamMemberModal
+          isOpen={showAddMemberModal}
+          onClose={() => setShowAddMemberModal(false)}
+          onMemberAdded={() => {
+            fetchUsers();
+            setShowAddMemberModal(false);
+          }}
+        />
       </RoleGuard>
     </Layout>
   );

@@ -178,6 +178,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Sign in function
   const signIn = async (email: string, password: string): Promise<void> => {
+    if (!auth || typeof auth.signInWithEmailAndPassword !== 'function') {
+      throw new Error('Firebase authentication is not properly configured. Please check your environment variables.');
+    }
+    
     try {
       setLoading(true);
       await signInWithEmailAndPassword(auth, email, password);
@@ -191,6 +195,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Sign up function
   const signUp = async (email: string, password: string, displayName?: string): Promise<void> => {
+    if (!auth || typeof auth.createUserWithEmailAndPassword !== 'function') {
+      throw new Error('Firebase authentication is not properly configured. Please check your environment variables.');
+    }
+    
     try {
       setLoading(true);
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -208,6 +216,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Sign out function
   const signOut = async (): Promise<void> => {
+    if (!auth || typeof auth.signOut !== 'function') {
+      console.warn('Firebase auth not properly initialized, clearing local state only');
+      setUser(null);
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('user');
+      }
+      return;
+    }
+    
     try {
       await firebaseSignOut(auth);
       setUser(null);
@@ -261,6 +278,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Listen for authentication state changes
   useEffect(() => {
+    // Check if Firebase auth is properly initialized
+    if (!auth || typeof auth.onAuthStateChanged !== 'function') {
+      console.warn('⚠️ Firebase auth not properly initialized, skipping auth state listener');
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (currentFirebaseUser) => {
       setFirebaseUser(currentFirebaseUser);
       
@@ -283,6 +307,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
+  const refreshUser = async () => {
+    if (firebaseUser) {
+      const userProfile = await fetchUserProfile(firebaseUser);
+      if (userProfile) {
+        setUser({
+          ...userProfile,
+          permissions: ROLE_PERMISSIONS[userProfile.role] || ROLE_PERMISSIONS[DEFAULT_ROLE]
+        });
+        setNeedsOnboarding(false);
+      }
+    }
+  };
+
   const value: AuthContextType = {
     user,
     loading,
@@ -294,6 +331,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     updateUserRole,
     hasPermission,
     completeOnboarding,
+    refreshUser,
   };
 
   return (
