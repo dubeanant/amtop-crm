@@ -178,7 +178,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Sign in function
   const signIn = async (email: string, password: string): Promise<void> => {
-    if (!auth || typeof auth.signInWithEmailAndPassword !== 'function') {
+    if (!auth) {
       throw new Error('Firebase authentication is not properly configured. Please check your environment variables.');
     }
     
@@ -195,7 +195,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Sign up function
   const signUp = async (email: string, password: string, displayName?: string): Promise<void> => {
-    if (!auth || typeof auth.createUserWithEmailAndPassword !== 'function') {
+    if (!auth) {
       throw new Error('Firebase authentication is not properly configured. Please check your environment variables.');
     }
     

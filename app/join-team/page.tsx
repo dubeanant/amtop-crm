@@ -1,14 +1,14 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
 
-export default function JoinTeamPage() {
+function JoinTeamInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, refreshUser } = useAuth();
+  const { refreshUser } = useAuth();
   const [invitation, setInvitation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,6 +27,7 @@ export default function JoinTeamPage() {
     }
 
     fetchInvitation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const fetchInvitation = async () => {
@@ -49,7 +50,7 @@ export default function JoinTeamPage() {
 
   const handleJoinTeam = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!invitation) {
       setError('No invitation found');
       return;
@@ -67,16 +68,13 @@ export default function JoinTeamPage() {
       let firebaseUser;
 
       if (isNewUser) {
-        // Create new user account
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         firebaseUser = userCredential.user;
       } else {
-        // Sign in existing user
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         firebaseUser = userCredential.user;
       }
 
-      // Accept invitation and join team
       const response = await fetch('/api/teams/invite/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -90,10 +88,7 @@ export default function JoinTeamPage() {
       const data = await response.json();
 
       if (response.ok) {
-        // Refresh user context to get updated organization info
         await refreshUser();
-        
-        // Redirect to dashboard
         router.push('/');
       } else {
         setError(data.error || 'Failed to join team');
@@ -198,7 +193,7 @@ export default function JoinTeamPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={true}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-gray-50"
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900 placeholder-gray-700 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
               </div>
             </div>
@@ -217,7 +212,7 @@ export default function JoinTeamPage() {
                     required={isNewUser}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 placeholder-gray-700 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     placeholder="Create a password for your account"
                   />
                 </div>
@@ -226,7 +221,7 @@ export default function JoinTeamPage() {
 
             {!isNewUser && (
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="password" className="block text sm font-medium text-gray-700">
                   Password
                 </label>
                 <div className="mt-1">
@@ -238,7 +233,7 @@ export default function JoinTeamPage() {
                     required={!isNewUser}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 placeholder-gray-700 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     placeholder="Enter your password"
                   />
                 </div>
@@ -293,5 +288,22 @@ export default function JoinTeamPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function JoinTeamPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <JoinTeamInner />
+    </Suspense>
   );
 }

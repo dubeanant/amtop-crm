@@ -118,7 +118,7 @@ export default function SignUp() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={loading}
-                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-all disabled:opacity-50"
+                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-700 transition-all disabled:opacity-50"
                 placeholder="your@email.com"
               />
             </div>
@@ -134,7 +134,7 @@ export default function SignUp() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={loading}
-                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-all disabled:opacity-50"
+                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-700 transition-all disabled:opacity-50"
                 placeholder="••••••••"
                 minLength={6}
               />
@@ -152,7 +152,7 @@ export default function SignUp() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 disabled={loading}
-                className={`w-full px-4 py-3 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-gray-900 placeholder-gray-500 transition-all disabled:opacity-50 ${
+                className={`w-full px-4 py-3 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-gray-900 placeholder-gray-700 transition-all disabled:opacity-50 ${
                   confirmPassword && password !== confirmPassword 
                     ? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
                     : confirmPassword && password === confirmPassword

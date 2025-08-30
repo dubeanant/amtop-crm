@@ -22,6 +22,7 @@ interface SidebarSection {
 }
 
 const sidebarSections: SidebarSection[] = [
+  /*
   {
     title: 'Overview',
     items: [
@@ -49,6 +50,7 @@ const sidebarSections: SidebarSection[] = [
       },
     ]
   },
+  */
   {
     title: 'Sales',
     items: [

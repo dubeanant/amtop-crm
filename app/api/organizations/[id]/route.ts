@@ -7,8 +7,11 @@ const dbName = process.env.MONGODB_DB as string;
 // DELETE organization
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
+  const { id } = params;
+  const organizationId = id;
   let client: MongoClient | null = null;
   
   try {
@@ -20,7 +23,6 @@ export async function DELETE(
     }
 
     const { requestingUserUid } = await req.json();
-    const organizationId = params.id;
     
     if (!requestingUserUid) {
       return NextResponse.json({ 
@@ -41,7 +43,7 @@ export async function DELETE(
     
     const db = client.db(dbName);
     const orgsCollection = db.collection("organizations");
-    const usersCollection = db.collection("users");
+    const usersCollection = db.collection<any>("users");
 
     // Find the organization
     const organization = await orgsCollection.findOne({ 
@@ -97,10 +99,10 @@ export async function DELETE(
     // Remove organization from all users' organization arrays
     await usersCollection.updateMany(
       { organizations: organizationId },
-      { 
+      ({ 
         $pull: { organizations: organizationId },
         $set: { updatedAt: new Date().toISOString() }
-      }
+      } as any)
     );
 
     // If any user had this as their active organization, switch them to their first remaining organization

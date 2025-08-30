@@ -117,7 +117,7 @@ export function AddLeadModal({ isOpen, onClose, onSubmit, isSubmitting = false }
               value={formData.name}
               onChange={(e) => handleInputChange('name', e.target.value)}
               disabled={isSubmitting}
-              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-500 ${
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-700 ${
                 errors.name ? 'border-red-300' : 'border-gray-300'
               }`}
               placeholder="Enter full name"
@@ -138,7 +138,7 @@ export function AddLeadModal({ isOpen, onClose, onSubmit, isSubmitting = false }
               value={formData.email}
               onChange={(e) => handleInputChange('email', e.target.value)}
               disabled={isSubmitting}
-              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-500 ${
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-700 ${
                 errors.email ? 'border-red-300' : 'border-gray-300'
               }`}
               placeholder="Enter email address"
@@ -159,7 +159,7 @@ export function AddLeadModal({ isOpen, onClose, onSubmit, isSubmitting = false }
               value={formData.number}
               onChange={(e) => handleInputChange('number', e.target.value)}
               disabled={isSubmitting}
-              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-500 ${
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-700 ${
                 errors.number ? 'border-red-300' : 'border-gray-300'
               }`}
               placeholder="Enter phone number"

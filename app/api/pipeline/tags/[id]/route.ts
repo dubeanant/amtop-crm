@@ -7,8 +7,11 @@ const dbName = process.env.MONGODB_DB as string;
 // PUT update pipeline tag
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
+  const { id } = params;
+  const tagId = id;
   let client: MongoClient | null = null;
   
   try {
@@ -88,8 +91,11 @@ export async function PUT(
 // DELETE pipeline tag
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
+  const { id } = params;
+  const tagId = id;
   let client: MongoClient | null = null;
   
   try {
@@ -100,7 +106,7 @@ export async function DELETE(
       }, { status: 500 });
     }
 
-    const tagId = params.id;
+    // tagId already resolved from params above
     const { organizationId } = await req.json();
     
     if (!organizationId) {

@@ -7,8 +7,11 @@ const dbName = process.env.MONGODB_DB as string;
 // PUT update pipeline step
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
+  const { id } = params;
+  const stepId = id;
   let client: MongoClient | null = null;
   
   try {
@@ -19,7 +22,7 @@ export async function PUT(
       }, { status: 500 });
     }
 
-    const stepId = params.id;
+    // stepId already resolved from params above
     const { title, description, color, bgColor, borderColor, organizationId } = await req.json();
     
     if (!title || !organizationId) {
@@ -76,8 +79,11 @@ export async function PUT(
 // DELETE pipeline step
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const params = await context.params;
+  const { id } = params;
+  const stepId = id;
   let client: MongoClient | null = null;
   
   try {
@@ -88,7 +94,7 @@ export async function DELETE(
       }, { status: 500 });
     }
 
-    const stepId = params.id;
+    // stepId already resolved from params above
     const { organizationId } = await req.json();
     
     if (!organizationId) {
